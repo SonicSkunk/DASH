@@ -1,0 +1,79 @@
+// ---- SIMHUB SCRIPT ----
+// CSV: RPM,SPEED,GEAR,POSITION,FUEL,LAP_MS,BEST_MS,DELTA_MS,MAXRPM,FLAG_Y,FLAG_B,FLAG_R,FLAG_G
+
+function safe(v){ return (v===null||v===undefined||v===""||v==="NaN"||isNaN(v)) ? 0 : v; }
+function int(v){ v = safe(v); return Math.round(parseFloat(v)) || 0; }
+
+function parseTimeMs(v){
+  if (!v) return 0;
+  let s = v.toString().trim();
+  if (s.indexOf(":") < 0) {
+    let sec = parseFloat(s);
+    let ms = isNaN(sec) ? 0 : Math.round(sec * 1000);
+    return (ms < 5000) ? 0 : ms;  // keep your cutoff
+  }
+  let p = s.split(":"); let h=0,m=0,sec=0;
+  if (p.length===2){ m=parseFloat(p[0]); sec=parseFloat(p[1]); }
+  else { h=parseFloat(p[0]); m=parseFloat(p[1]); sec=parseFloat(p[2]); }
+  if (isNaN(h)||isNaN(m)||isNaN(sec)) return 0;
+  let ms = Math.round(((h*3600)+(m*60)+sec)*1000);
+  return (ms < 5000) ? 0 : ms;
+}
+
+function pickDeltaMs(){
+  const candidates = [
+    // Position-matched deltas (most accurate)
+    'PersistantTrackerPlugin.DeltaToSessionBestLap_Difference',
+    'PersistantTrackerPlugin.DeltaToSessionBestLap.Difference',
+    'PersistantTrackerPlugin.DeltaLive_Difference',
+    'PersistantTrackerPlugin.DeltaLive.Difference',
+    'PersistantTrackerPlugin.DeltaToReferenceLap_Difference',
+    'PersistantTrackerPlugin.DeltaToReferenceLap.Difference',
+    // Game-core variants seen in some titles/profiles
+    'DataCorePlugin.GameData.DeltaToBestLap',
+    'DataCorePlugin.GameData.DeltaBest',
+    'DataCorePlugin.GameData.TimeDeltaBest',
+    'DataCorePlugin.GameData.Delta',
+  ];
+  for (let k=0; k<candidates.length; k++){
+    let raw = $prop(candidates[k]);
+    if (raw === null || raw === undefined || raw === "" || raw === "NaN") continue;
+    let val = parseFloat(raw);
+    if (isNaN(val)) continue;
+    // Heuristic: if magnitude < 600 it’s seconds, else already ms
+    let ms = Math.abs(val) < 600 ? Math.round(val * 1000) : Math.round(val);
+    if (ms !== 0) return ms;
+  }
+
+  let pred = parseFloat($prop('PersistantTrackerPlugin.EstimatedLapTime_SessionBestBasedSimhub_EstimatedDelta'));
+  if (!isNaN(pred)) return Math.round(pred * 1000);
+
+  return 0;
+}
+
+let rpm    = int($prop('DataCorePlugin.GameData.Rpms'));
+let speed  = int($prop('DataCorePlugin.GameData.SpeedKmh'));
+let gear   = int($prop('DataCorePlugin.GameData.Gear'));
+let pos    = int($prop('DataCorePlugin.GameData.Position'));
+let fuel   = int($prop('DataCorePlugin.GameData.FuelPercent'));
+let maxRpm = int($prop('DataCorePlugin.GameData.MaxRpm'));
+
+let lapMs  = parseTimeMs($prop('DataCorePlugin.GameData.LastLapTime')) ||
+             parseTimeMs($prop('PersistantTrackerPlugin.LastLapTime')) || 0;
+
+let bestMs = parseTimeMs($prop('DataCorePlugin.GameData.BestLapTime')) ||
+             parseTimeMs($prop('PersistantTrackerPlugin.BestLapTime')) ||
+             parseTimeMs($prop('PersistantTrackerPlugin.EstimatedLapTime_SessionBestBasedSimhub_ReferenceLapTime')) || 0;
+
+let deltaMs = pickDeltaMs(); // negative = faster
+
+let flagYellow = int($prop('DataCorePlugin.GameData.Flag_Yellow')) ? 1 : 0;
+let flagBlue   = int($prop('DataCorePlugin.GameData.Flag_Blue'))   ? 1 : 0;
+let flagRed    = int($prop('DataCorePlugin.GameData.Flag_Red'))    ? 1 : 0;
+let flagGreen  = int($prop('DataCorePlugin.GameData.Flag_Green'))  ? 1 : 0;
+
+return [
+  rpm, speed, gear, pos, fuel,
+  lapMs, bestMs, deltaMs, maxRpm,
+  flagYellow, flagBlue, flagRed, flagGreen
+].join(',') + "\n";

@@ -5,18 +5,8 @@ WHAT IT DOES
 - Reads one CSV line per frame from Serial (115200). Field order:
   RPM,SPEED,GEAR,POSITION,FUEL,LAP_MS,BEST_MS,DELTA_MS,MAXRPM,FLAG_YELLOW,FLAG_BLUE,FLAG_RED,FLAG_GREEN
 - Renders RPM/speed/fuel/gear/pos/times on ILI9341
-- Drives WS2812 shift-light bar + race flags using ESP32 RMT (no flicker)
-- Falls back to "NO DATA FEED" screen + slow blinking end LEDs if no serial data for 2 seconds
-
-WHAT YOU CAN TWEAK FAST
-- TFT pins: TFT_CS/TFT_DC/TFT_RST (match your wiring)
-- LED strip pin/count: LED_PIN / LED_COUNT
-- LED_BRIGHTNESS: overall LED cap [0.0..1.0]
-- LED_UPDATE_HZ: how often LEDs update
-- NO-DATA timeout: see lastDataTime checks in loop()
-- Layout sizes/positions: section "LAYOUT" constants
-- Shift light behavior: drawRevLEDs() startPct/endPct/colors
-*/
+- Drives WS2812 shift-light bar + race flags using ESP32 RMT
+- Falls back to "NO DATA" screen if no serial data for 2 seconds
 
 #include <SPI.h>
 #include <Adafruit_GFX.h>
@@ -315,7 +305,6 @@ void drawRevLEDs(){
 
   if (mask){
     if (now - lastFlash > flashPeriod) { flashState = !flashState; lastFlash = now; }
-    // Yellow flag color changed to amber to match rev bar (255,140,0)
     RgbColor c = flagRed ? dimColor(RgbColor(255,0,0)) :
                  flagYellow ? dimColor(RgbColor(255,140,0)) :
                  flagBlue ? dimColor(RgbColor(0,0,255)) :

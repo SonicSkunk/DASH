@@ -1,5 +1,4 @@
-# ESP32 SimHub Dash (ILI9341 320×240 + WS2812) — Early Development
-
+# ESP32 SimHub Dash for simracing (ILI9341 320×240 + WS2812)
 **Status:** early prototype. Functional, changing fast.
 
 ESP32 dashboard for SimHub telemetry. Renders RPM, speed, gear, position, fuel, lap/best, and delta on an ILI9341. 
@@ -9,8 +8,8 @@ Drives an 8-LED shift bar via ESP32 RMT. Falls back to **NO DATA FEED** when inp
 
 ## Features
 - RMT-driven WS2812 used as rev bar and flag display.
-- 320x240 TFT display showing gear, rpm, speed, position, fuel laptimes and delta.
-- Delta readout with color coding. Green for gaining and red for losing time to reference.
+- 320x240 TFT display showing gear, rpm, speed, position, fuel, laptimes and delta.
+- Delta readout with color coding. Green for gaining / red for losing time to reference.
 - Flag override on LED bar (red, yellow, blue, green).
 - No-data fail mode: big warning + LED end-blink.
 - Easy pin/brightness/layout tuning in code.
@@ -36,10 +35,6 @@ Drives an 8-LED shift bar via ESP32 RMT. Falls back to **NO DATA FEED** when inp
 - `Adafruit_GFX`
 - `Adafruit_ILI9341`
 - `NeoPixelBus`
-
----
-
-ESP32 Arduino core required.
 
 ---
 

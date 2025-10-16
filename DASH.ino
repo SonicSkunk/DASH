@@ -7,7 +7,7 @@ WHAT IT DOES
 - Renders RPM/speed/fuel/gear/pos/times on ILI9341
 - Drives WS2812 shift-light bar + race flags using ESP32 RMT
 - Falls back to "NO DATA" screen if no serial data for 2 seconds
-
+*/
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
@@ -65,12 +65,8 @@ long clap=-1, cbest=-1, cdelta=LONG_MIN/2;
 
 // ================== DATA FRESHNESS ==================
 unsigned long lastDataTime = 0;
-bool dataFresh = false;
 bool noDataScreenActive = false;
 
-// ================== LED UPDATE RATE ==================
-#define LED_UPDATE_HZ 50
-static unsigned long lastLedUpd = 0;
 
 // ================== LAYOUT (PIXELS) ==================
 const int M  = 6;
@@ -290,11 +286,7 @@ void drawDelta() {
 // - Flags override: if any flag set, whole bar blinks that color.
 // - Otherwise: progressive bar from 60% to 90% of maxRpm.
 void drawRevLEDs(){
-  unsigned long now = millis();
-  if (now - lastLedUpd < (1000/LED_UPDATE_HZ)) return;
-  lastLedUpd = now;
-
-  // If we haven't had data recently, don't animate revs here.
+  unsigned long now = millis();// If we haven't had data recently, don't animate revs here.
   if (now - lastDataTime > 2000) return;
 
   // Flag override with blink
@@ -350,8 +342,7 @@ void drawRevLEDs(){
 void readCSV(){
   static String line;
   while (Serial.available()) {
-    dataFresh = true;
-    lastDataTime = millis();
+lastDataTime = millis();
     char ch = (char)Serial.read();
     if ((uint8_t)ch == 10) { // LF
       long v[13] = {0}; int i = 0; String tok = "";
@@ -415,8 +406,7 @@ void setup(){
 
 // ================== MAIN LOOP ==================
 void loop(){
-  dataFresh = false;
-  readCSV();
+readCSV();
 
   if (millis() - lastDataTime > 2000) {
     if (!noDataScreenActive) { drawNoDataScreen(); noDataScreenActive = true; }

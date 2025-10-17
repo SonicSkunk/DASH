@@ -139,11 +139,23 @@ static void drawCenteredText(int x,int y,int w,int h,const String& s,uint16_t co
 // One-time background boxes/labels
 void drawStatic(){
   tft.fillScreen(C_BG);
+
+  // Left column
   frame(LX,  Y1, BW, BH); caption(LX+6,  Y1+6, "RPM");
-  frame(LX,  Y2, BW, BH); caption(LX+6,  Y2+6, "speed");
+
+  // Calculate taller height for speed/fuel boxes so they align with bottom of gear box
+  const int BH_speedFuel = (GY + GH) - Y2;
+
+  frame(LX,  Y2, BW, BH_speedFuel); caption(LX+6,  Y2+6, "speed");
+
+  // Right column
   frame(RXc, Y1, BW, BH);
-  frame(RXc, Y2, BW, BH); caption(RXc+6, Y2+6, "fuel");
+  frame(RXc, Y2, BW, BH_speedFuel); caption(RXc+6, Y2+6, "fuel");
+
+  // Center gear box
   frame(GX,  GY, GW, GH);
+
+  // Bottom row
   frame(BLX, BOT_Y, BBW, BOT_H);
   frame(BRX, BOT_Y, BBW, BOT_H);
 }

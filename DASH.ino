@@ -239,13 +239,12 @@ int x0 = BLX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
 tft.fillRect(x0, y0, w, h, C_BG);
 
 
-// Use bold 12pt font for lap times, smaller default for labels
+// Labels smaller, positioned left
 tft.setFont();
 tft.setTextColor(C_TX);
 tft.setTextSize(1);
 
 
-// Labels
 const int labelOffsetX = 6;
 const int labelOffsetY = 5;
 tft.setCursor(x0 + labelOffsetX, y0 + labelOffsetY + 8);
@@ -254,25 +253,25 @@ tft.setCursor(x0 + labelOffsetX, y0 + h / 2 + labelOffsetY);
 tft.print("best:");
 
 
-// Lap times
+// Larger font for times
 String sLast = hasLast ? msToStr(lapMs) : String("--:--.---");
 String sBest = hasBest ? msToStr(bestMs) : String("--:--.---");
-
-
 tft.setFont(&FreeSansBold12pt7b);
+
+
 int16_t bx, by; uint16_t bw, bh;
 int rightEdge = x0 + w - 6;
 
 
-// Measure first string to align vertically and horizontally
+// Adjusted Y positions to bring bottom time closer to box bottom
 tft.getTextBounds(sLast, 0, 0, &bx, &by, &bw, &bh);
-int baseY1 = y0 + (h / 4) + (bh / 2);
+int baseY1 = y0 + (h / 4) + (bh / 2) - 2;
 tft.setCursor(rightEdge - bw, baseY1);
 tft.print(sLast);
 
 
 tft.getTextBounds(sBest, 0, 0, &bx, &by, &bw, &bh);
-int baseY2 = y0 + (3 * h / 4) + (bh / 2) - 4; // slightly tighter spacing
+int baseY2 = y0 + (3 * h / 4) + (bh / 2) - 1; // slightly closer to bottom edge
 tft.setCursor(rightEdge - bw, baseY2);
 tft.print(sBest);
 
@@ -284,30 +283,44 @@ cbest = bestMs;
 }
 
 // Bottom-right box: delta to reference. Green = gaining, Red = losing.
-static const int DELTA_BASELINE_FIX = 6;
+static const int DELTA_BASELINE_FIX = 0;
 void drawDelta() {
-  if (deltaMs == cdelta) return;
+if (deltaMs == cdelta) return;
 
-  const int x0 = BRX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
-  tft.fillRect(x0, y0, w, h, C_BG);
 
-  long v = deltaMs; unsigned long a = (v < 0) ? (unsigned long)(-v) : (unsigned long)v;
-  int whole = a / 1000; int frac  = a % 1000; if (whole > 99) { whole = 99; frac = 999; }
-  char sign = (v < 0 ? '-' : (v > 0 ? '+' : '±'));
+const int x0 = BRX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
+tft.fillRect(x0, y0, w, h, C_BG);
 
-  char buf[12];
-  if (whole < 10) snprintf(buf, sizeof(buf), "%c %d.%03d", sign, whole, frac);
-  else snprintf(buf, sizeof(buf), "%c%02d.%03d", sign, whole, frac);
 
-  uint16_t col = (v < 0) ? C_OK : (v > 0 ? C_BAD : C_TX);
+long v = deltaMs; unsigned long a = (v < 0) ? (unsigned long)(-v) : (unsigned long)v;
+int whole = a / 1000; int frac = a % 1000; if (whole > 99) { whole = 99; frac = 999; }
+char sign = (v < 0 ? '-' : (v > 0 ? '+' : '±'));
 
-  tft.setTextSize(1); tft.setFont(&FreeSansBold18pt7b); tft.setTextColor(col);
-  int16_t bx, by; uint16_t bw, bh; tft.getTextBounds(buf, 0, 0, &bx, &by, &bw, &bh);
-  int cx = x0 + (w - bw) / 2 - bx; int cy = y0 + (h - bh) / 2 - by - DELTA_BASELINE_FIX;
-  tft.setCursor(cx, cy); tft.print(buf);
-  tft.setFont(); tft.setTextSize(1);
 
-  cdelta = deltaMs;
+char buf[12];
+if (whole < 10) snprintf(buf, sizeof(buf), "%c %d.%03d", sign, whole, frac);
+else snprintf(buf, sizeof(buf), "%c%02d.%03d", sign, whole, frac);
+
+
+uint16_t col = (v < 0) ? C_OK : (v > 0 ? C_BAD : C_TX);
+
+
+tft.setTextSize(1);
+tft.setFont(&FreeSansBold18pt7b);
+tft.setTextColor(col);
+
+
+int16_t bx, by; uint16_t bw, bh;
+tft.getTextBounds(buf, 0, 0, &bx, &by, &bw, &bh);
+int cx = x0 + (w - bw) / 2 - bx;
+int cy = y0 + (h - bh) / 2 - by; // fully centered vertically
+tft.setCursor(cx, cy);
+tft.print(buf);
+
+
+tft.setFont();
+tft.setTextSize(1);
+cdelta = deltaMs;
 }
 
 // Shift light + flags

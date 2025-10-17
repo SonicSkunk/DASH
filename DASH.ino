@@ -230,29 +230,57 @@ void drawPosBig(){
 
 // Bottom-left box: last and best lap, right-aligned
 void drawLapBest() {
-  bool hasLast = lapMs > 0;
-  bool hasBest = bestMs > 0;
-  if (lapMs == clap && bestMs == cbest) return;
+bool hasLast = lapMs > 0;
+bool hasBest = bestMs > 0;
+if (lapMs == clap && bestMs == cbest) return;
 
-  int x0 = BLX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
-  tft.fillRect(x0, y0, w, h, C_BG);
-  tft.setFont(); tft.setTextColor(C_TX); tft.setTextSize(1);
 
-  const int lineH = 16; int baseY1 = y0 + 15; int baseY2 = baseY1 + lineH;
-  tft.setCursor(x0 + 6, baseY1); tft.print("last:");
-  tft.setCursor(x0 + 6, baseY2); tft.print("best:");
+int x0 = BLX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
+tft.fillRect(x0, y0, w, h, C_BG);
 
-  String sLast = hasLast ? msToStr(lapMs) : String("--:--.---");
-  String sBest = hasBest ? msToStr(bestMs) : String("--:--.---");
 
-  int16_t bx, by; uint16_t bw, bh; int rightEdge = x0 + w - 6;
-  tft.getTextBounds(sLast, 0, 0, &bx, &by, &bw, &bh);
-  tft.setCursor(rightEdge - bw, baseY1); tft.print(sLast);
+// Use bold 12pt font for lap times, smaller default for labels
+tft.setFont();
+tft.setTextColor(C_TX);
+tft.setTextSize(1);
 
-  tft.getTextBounds(sBest, 0, 0, &bx, &by, &bw, &bh);
-  tft.setCursor(rightEdge - bw, baseY2); tft.print(sBest);
 
-  clap = lapMs; cbest = bestMs;
+// Labels
+const int labelOffsetX = 6;
+const int labelOffsetY = 5;
+tft.setCursor(x0 + labelOffsetX, y0 + labelOffsetY + 8);
+tft.print("last:");
+tft.setCursor(x0 + labelOffsetX, y0 + h / 2 + labelOffsetY);
+tft.print("best:");
+
+
+// Lap times
+String sLast = hasLast ? msToStr(lapMs) : String("--:--.---");
+String sBest = hasBest ? msToStr(bestMs) : String("--:--.---");
+
+
+tft.setFont(&FreeSansBold12pt7b);
+int16_t bx, by; uint16_t bw, bh;
+int rightEdge = x0 + w - 6;
+
+
+// Measure first string to align vertically and horizontally
+tft.getTextBounds(sLast, 0, 0, &bx, &by, &bw, &bh);
+int baseY1 = y0 + (h / 4) + (bh / 2);
+tft.setCursor(rightEdge - bw, baseY1);
+tft.print(sLast);
+
+
+tft.getTextBounds(sBest, 0, 0, &bx, &by, &bw, &bh);
+int baseY2 = y0 + (3 * h / 4) + (bh / 2) - 4; // slightly tighter spacing
+tft.setCursor(rightEdge - bw, baseY2);
+tft.print(sBest);
+
+
+tft.setFont();
+tft.setTextSize(1);
+clap = lapMs;
+cbest = bestMs;
 }
 
 // Bottom-right box: delta to reference. Green = gaining, Red = losing.

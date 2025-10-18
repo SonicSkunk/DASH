@@ -1,5 +1,9 @@
-// ---- SIMHUB SCRIPT ----
-// CSV: RPM,SPEED,GEAR,POSITION,FUEL,LAP_MS,BEST_MS,DELTA_MS,MAXRPM,FLAG_Y,FLAG_B,FLAG_R,FLAG_G
+// ---- CLEAN SIMHUB SCRIPT ----
+// CSV: RPM,SPEED,GEAR,POSITION,FUEL,LAP_MS,BEST_MS,DELTA_MS,MAXRPM,FLAG_Y,FLAG_B,FLAG_R,FLAG_G, CURRENT_LAP, TOTAL_LAPS
+//
+// NOTE: This appends two optional trailing fields:
+//   field 14 (index 13) = CurrentLap (integer, 0 if unknown)
+//   field 15 (index 14) = TotalLaps  (integer, 0 if unknown => dash will treat as "infinite")
 
 function safe(v){ return (v===null||v===undefined||v===""||v==="NaN"||isNaN(v)) ? 0 : v; }
 function int(v){ v = safe(v); return Math.round(parseFloat(v)) || 0; }
@@ -20,6 +24,7 @@ function parseTimeMs(v){
   return (ms < 5000) ? 0 : ms;
 }
 
+// Try all known live/position-matched deltas. If value looks like seconds, convert to ms.
 function pickDeltaMs(){
   const candidates = [
     // Position-matched deltas (most accurate)
@@ -45,6 +50,7 @@ function pickDeltaMs(){
     if (ms !== 0) return ms;
   }
 
+  // Last resort: predictive estimate (your original source)
   let pred = parseFloat($prop('PersistantTrackerPlugin.EstimatedLapTime_SessionBestBasedSimhub_EstimatedDelta'));
   if (!isNaN(pred)) return Math.round(pred * 1000);
 
@@ -72,8 +78,20 @@ let flagBlue   = int($prop('DataCorePlugin.GameData.Flag_Blue'))   ? 1 : 0;
 let flagRed    = int($prop('DataCorePlugin.GameData.Flag_Red'))    ? 1 : 0;
 let flagGreen  = int($prop('DataCorePlugin.GameData.Flag_Green'))  ? 1 : 0;
 
+// --- Lap counters (robust lookup across common property names) ---
+// Prefer DataCorePlugin.GameData.CurrentLap / TotalLaps but fall back to other known names.
+let curLap = int($prop('DataCorePlugin.GameData.CurrentLap')) ||
+             int($prop('PersistantTrackerPlugin.CurrentLap')) ||
+             int($prop('GameData.CurrentLap')) || 0;
+
+let totLaps = int($prop('DataCorePlugin.GameData.TotalLaps')) ||
+              int($prop('PersistantTrackerPlugin.TotalLaps')) ||
+              int($prop('GameData.TotalLaps')) || 0;
+
+// Return CSV line: existing 13 fields + curLap + totLaps
 return [
   rpm, speed, gear, pos, fuel,
   lapMs, bestMs, deltaMs, maxRpm,
-  flagYellow, flagBlue, flagRed, flagGreen
+  flagYellow, flagBlue, flagRed, flagGreen,
+  curLap, totLaps
 ].join(',') + "\n";

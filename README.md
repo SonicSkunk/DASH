@@ -56,6 +56,7 @@ Once finalized, **STL and project files will be published** in this repo.
 - Layout and font baselines not final; subject to change.
 - Delta vertical centering uses a small baseline fix.
 - SimHub CSV sender must be configured manually.
+- Refresh flickering
 
 ---
 

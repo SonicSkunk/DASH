@@ -1,13 +1,12 @@
 /*
 ESP32 SimHub Dash for ILI9341 (320x240) + 8x WS2812 LEDs
-
-WHAT IT DOES
-- Reads one CSV line per frame from Serial (115200). Field order:
-  RPM,SPEED,GEAR,POSITION,FUEL,LAP_MS,BEST_MS,DELTA_MS,MAXRPM,FLAG_YELLOW,FLAG_BLUE,FLAG_RED,FLAG_GREEN
-- Renders RPM/speed/fuel/gear/pos/times on ILI9341
-- Drives WS2812 shift-light bar + race flags using ESP32 RMT
-- Falls back to "NO DATA" screen if no serial data for 2 seconds
+Updates:
+- Speed + RPM stacked/centered in lower-left box; top-left box empty.
+- GEAR uses a fixed font size (no autosizing), with a margin.
+- Margin is applied around the gear text so it never kisses the frame.
+- Removed all autosizing/font-scaling logic; fonts are fixed per area.
 */
+
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
@@ -17,9 +16,15 @@ WHAT IT DOES
 #ifdef ARDUINO_ARCH_ESP32
   #include <esp_bt.h>
 #endif
+
+// Fonts
+#include <Fonts/FreeSansBold66pt7b.h>
+#include <Fonts/FreeSansBold48pt7b.h>
+#include <Fonts/FreeSansBold36pt7b.h>
 #include <Fonts/FreeSansBold24pt7b.h>
 #include <Fonts/FreeSansBold18pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
+
 #include <limits.h>
 
 // ================== HARDWARE PINS ==================
@@ -27,17 +32,14 @@ WHAT IT DOES
 #define TFT_DC   16
 #define TFT_RST   4
 
-// WS2812 strip (8 LEDs by default). Use a GPIO with RMT support.
+// WS2812 strip (8 LEDs by default)
 #define LED_PIN   13
 #define LED_COUNT 8
 
-// ILI9341 SPI display (hardware SPI used)
 Adafruit_ILI9341 tft(TFT_CS, TFT_DC, TFT_RST);
-
-// WS2812 via ESP32 RMT @ 800 Kbps, GRB order (NeoPixelBus handles timing)
 NeoPixelBus<NeoGrbFeature, NeoEsp32Rmt0800KbpsMethod> strip(LED_COUNT, LED_PIN);
 
-// ================== LED BRIGHTNESS CAP ==================
+// ================== LED BRIGHTNESS ==================
 const float LED_BRIGHTNESS = 0.07f;
 static inline RgbColor dimColor(RgbColor c) {
   return RgbColor(
@@ -47,14 +49,14 @@ static inline RgbColor dimColor(RgbColor c) {
   );
 }
 
-// ================== COLOR PRESETS ==================
+// ================== COLORS ==================
 const uint16_t C_BG  = ILI9341_BLACK;
 const uint16_t C_TX  = ILI9341_WHITE;
 const uint16_t C_BOX = ILI9341_YELLOW;
 const uint16_t C_OK  = ILI9341_GREEN;
 const uint16_t C_BAD = ILI9341_RED;
 
-// ================== LIVE TELEMETRY STATE ==================
+// ================== STATE ==================
 int rpm=0, maxRpm=8000, speed=0, gear=0, pos=0, fuel=0;
 long lapMs=0, bestMs=0, deltaMs=0;
 int flagYellow=0, flagBlue=0, flagRed=0, flagGreen=0;
@@ -67,8 +69,7 @@ long clap=-1, cbest=-1, cdelta=LONG_MIN/2;
 unsigned long lastDataTime = 0;
 bool noDataScreenActive = false;
 
-
-// ================== LAYOUT (PIXELS) ==================
+// ================== LAYOUT ==================
 const int M  = 6;
 const int G  = 8;
 const int BW = 92;
@@ -92,7 +93,19 @@ const int BBW = (320 - (3*M))/2;
 const int BLX = M;
 const int BRX = BLX + BBW + M;
 
-// ================== SMALL HELPERS ==================
+static inline int BH_speedFuel() { return (GY + GH) - Y2; }
+
+// ================== FIXED FONTS ==================
+// Choose one fixed font per logical area (no autosizing)
+static const GFXfont* FONT_GEAR  = &FreeSansBold66pt7b;
+static const GFXfont* FONT_SPEED = &FreeSansBold24pt7b;
+static const GFXfont* FONT_RPM   = &FreeSansBold12pt7b;
+static const GFXfont* FONT_POS   = &FreeSansBold24pt7b;
+static const GFXfont* FONT_FUEL  = &FreeSansBold18pt7b;
+static const GFXfont* FONT_LAPBEST = &FreeSansBold12pt7b;
+static const GFXfont* FONT_DELTA = &FreeSansBold18pt7b;
+
+// ================== HELPERS ==================
 static inline String msToStr(long ms) {
   bool neg = ms < 0; if (neg) ms = -ms;
   long t = ms/1000, mm = t/60, ss = t%60, sss = ms%1000;
@@ -103,64 +116,76 @@ static inline String msToStr(long ms) {
 
 void frame(int x,int y,int w,int h){ tft.drawRect(x,y,w,h,C_BOX); }
 
-void caption(int x,int y,const char* s){
-  tft.setFont();
-  tft.setTextColor(C_TX);
-  tft.setTextSize(2);
-  tft.setCursor(x,y);
-  tft.print(s);
-}
-
-// Draw text centered in a rectangle. Picks a font that fits, then prints.
-static void drawCenteredText(int x,int y,int w,int h,const String& s,uint16_t col){
-  const GFXfont* fonts[] = { &FreeSansBold24pt7b, &FreeSansBold18pt7b, &FreeSansBold12pt7b, nullptr };
+// Center a single-string using a fixed font
+static void drawCenteredText_fixedFont(int x,int y,int w,int h,const GFXfont* font,const String& s,uint16_t col){
   tft.fillRect(x+2,y+2,w-4,h-4,C_BG);
-  int16_t bx,by; uint16_t bw,bh;
-  for(int i=0; fonts[i]; i++){
-    tft.setFont(fonts[i]);
-    tft.getTextBounds(s, 0, 0, &bx, &by, &bw, &bh);
-    if(bw <= w-10 && bh <= h-10){
-      tft.setTextColor(col);
-      tft.setCursor(x + (w - bw)/2 - bx, y + (h - bh)/2 - by);
-      tft.print(s);
-      tft.setFont();
-      return;
-    }
-  }
-  // fallback tiny font if nothing fits
-  tft.setFont(); tft.setTextSize(2);
-  int cw = 6*2*s.length(), ch = 8*2;
-  tft.setTextColor(col);
-  tft.setCursor(x + (w - cw)/2, y + (h - ch)/2);
-  tft.print(s);
+  tft.setFont(font);
   tft.setTextSize(1);
+  int16_t bx,by; uint16_t bw,bh;
+  tft.getTextBounds(s, 0, 0, &bx, &by, &bw, &bh);
+  int cx = x + (w - bw)/2 - bx;
+  int cy = y + (h - bh)/2 - by;
+  tft.setTextColor(col);
+  tft.setCursor(cx, cy);
+  tft.print(s);
+  tft.setFont(); // restore classic
 }
 
-// One-time background boxes/labels
+// Two-line stacked text with fixed fonts (topFont for top, botFont for bottom)
+static void drawTwoLineCentered_fixedFonts(int x,int y,int w,int h,const GFXfont* topFont,const String& top,const GFXfont* botFont,const String& bottom,uint16_t col){
+  const int gap = 6;
+  tft.fillRect(x+2,y+2,w-4,h-4,C_BG);
+  tft.setTextWrap(false);
+
+  // measure top
+  tft.setFont(topFont); tft.setTextSize(1);
+  int16_t tbx,tby; uint16_t tbw,tbh;
+  tft.getTextBounds(top, 0, 0, &tbx, &tby, &tbw, &tbh);
+
+  // measure bottom
+  tft.setFont(botFont); tft.setTextSize(1);
+  int16_t bbx,bby; uint16_t bbw,bbh;
+  tft.getTextBounds(bottom, 0, 0, &bbx, &bby, &bbw, &bbh);
+
+  int totalH = (int)tbh + gap + (int)bbh;
+  int blockTop = y + (h - totalH)/2;
+
+  int topBaseline = blockTop - tby;
+  int botBaseline = blockTop + tbh + gap - bby;
+
+  int cxTop = x + (w - tbw)/2 - tbx;
+  int cxBot = x + (w - bbw)/2 - bbx;
+
+  tft.setTextColor(col);
+  tft.setFont(topFont); tft.setCursor(cxTop, topBaseline); tft.print(top);
+  tft.setFont(botFont); tft.setCursor(cxBot, botBaseline); tft.print(bottom);
+
+  tft.setFont(); // restore classic
+}
+
+// ================== STATIC BACKGROUND ==================
 void drawStatic(){
   tft.fillScreen(C_BG);
 
   // Left column
-  frame(LX,  Y1, BW, BH); caption(LX+6,  Y1+6, "RPM");
-
-  // Calculate taller height for speed/fuel boxes so they align with bottom of gear box
-  const int BH_speedFuel = (GY + GH) - Y2;
-
-  frame(LX,  Y2, BW, BH_speedFuel); caption(LX+6,  Y2+6, "speed");
+  frame(LX,  Y1, BW, BH);              // keep empty
+  frame(LX,  Y2, BW, BH_speedFuel());  // speed+rpm live here
 
   // Right column
-  frame(RXc, Y1, BW, BH);
-  frame(RXc, Y2, BW, BH_speedFuel); caption(RXc+6, Y2+6, "fuel");
+  frame(RXc, Y1, BW, BH);              // position box
+  frame(RXc, Y2, BW, BH_speedFuel());  // fuel box
+  tft.setFont(); tft.setTextSize(2); tft.setTextColor(C_TX);
+  tft.setCursor(RXc+6, Y2+6); tft.print("fuel");
 
   // Center gear box
   frame(GX,  GY, GW, GH);
 
   // Bottom row
-  frame(BLX, BOT_Y, BBW, BOT_H);
-  frame(BRX, BOT_Y, BBW, BOT_H);
+  frame(BLX, BOT_Y, BBW, BOT_H);       // lap/best
+  frame(BRX, BOT_Y, BBW, BOT_H);       // delta
 }
 
-// Big red message when serial feed dies (no redraw spam)
+// ================== NO DATA ==================
 void drawNoDataScreen() {
   tft.fillScreen(C_BG);
   tft.setFont(); tft.setTextSize(3); tft.setTextColor(C_BAD);
@@ -171,19 +196,11 @@ void drawNoDataScreen() {
   tft.setCursor(x, y); tft.print(msg);
 }
 
-// Slow blink first/last LEDs in red during NO DATA
 void setNoDataLeds() {
   static unsigned long lastBlink=0;
-  static bool on=false;
-  static bool lastOn=false;
+  static bool on=false, lastOn=false;
   unsigned long now=millis();
-
-  // 1 second period
-  if (now - lastBlink >= 1000) {
-    lastBlink = now;
-    on = !on;
-  }
-
+  if (now - lastBlink >= 1000) { lastBlink = now; on = !on; }
   if (on != lastOn) {
     for (int i = 0; i < LED_COUNT; i++) {
       RgbColor c = ((i == 0 || i == LED_COUNT-1) && on) ? dimColor(RgbColor(255,0,0))
@@ -195,154 +212,147 @@ void setNoDataLeds() {
   }
 }
 
-// Clears the whole LED bar fast
 void clearAllLeds() {
   for (int i = 0; i < LED_COUNT; i++) strip.SetPixelColor(i, dimColor(RgbColor(0)));
   strip.Show();
 }
 
-// Each drawX only updates if the value changed to reduce flicker
-void drawRPM(){
-  if(rpm==crpm) return;
-  tft.fillRect(LX+6, Y1+28, BW-12, BH-30, C_BG);
-  tft.setFont(); tft.setTextColor(C_TX); tft.setTextSize(2);
-  tft.setCursor(LX+8, Y1+32); tft.print(rpm);
-  crpm=rpm;
-}
-
-void drawSpeed(){
-  if(speed==cspeed) return;
-  tft.fillRect(LX+6, Y2+28, BW-12, BH-30, C_BG);
-  tft.setFont(); tft.setTextColor(C_TX); tft.setTextSize(2);
-  tft.setCursor(LX+8, Y2+32); tft.print(speed);
-  cspeed=speed;
+// ================== DYNAMIC DRAW ==================
+void drawSpeedRpmStack(){
+  if (speed == cspeed && rpm == crpm) return;
+  // fixed fonts: speed top, rpm bottom
+  drawTwoLineCentered_fixedFonts(LX, Y2, BW, BH_speedFuel(), FONT_SPEED, String(speed), FONT_RPM, String(rpm), C_TX);
+  cspeed = speed; crpm = rpm;
 }
 
 void drawFuel(){
   if(fuel==cfuel) return;
-  tft.fillRect(RXc+6, Y2+28, BW-12, BH-30, C_BG);
-  tft.setFont(); tft.setTextColor(C_TX); tft.setTextSize(2);
-  tft.setCursor(RXc+8, Y2+32); tft.print(fuel); tft.print('%');
+  tft.fillRect(RXc+2, Y2+2, BW-4, BH_speedFuel()-4, C_BG);
+
+  String s = String(fuel) + "%";
+  tft.setFont(FONT_FUEL); tft.setTextSize(1);
+  int16_t bx, by; uint16_t bw, bh;
+  tft.getTextBounds(s, 0, 0, &bx, &by, &bw, &bh);
+  int cx = RXc + (BW - bw)/2 - bx;
+  int cy = Y2  + (BH_speedFuel() - bh)/2 - by;
+  tft.setTextColor(C_TX);
+  tft.setCursor(cx, cy); tft.print(s);
+  tft.setFont(); // classic
   cfuel=fuel;
 }
 
+// ========== GEAR FIXED FONT WITH MARGIN ==========
 void drawGear(){
-  if(gear==cgear) return;
+  if (gear == cgear) return;
   String g = (gear<0) ? "R" : (gear==0) ? "N" : String(gear);
-  drawCenteredText(GX,GY,GW,GH,g,C_BOX);
-  cgear=gear;
+
+  // Clear box interior
+  tft.fillRect(GX+2, GY+2, GW-4, GH-4, C_BG);
+
+  // Fixed font for gear
+  const GFXfont* chosen = FONT_GEAR;
+
+  // Margin inside the box so the glyphs don't touch the frame
+  const int pad = 6;  // tweak if you want more/less air
+  const int maxW = GW - 2*pad;
+  const int maxH = GH - 2*pad;
+
+  tft.setTextWrap(false);
+  tft.setFont(chosen);
+  tft.setTextSize(1);
+
+  int16_t bx, by; uint16_t bw, bh;
+  tft.getTextBounds(g, 0, 0, &bx, &by, &bw, &bh);
+
+  // Note: we no longer autosize. If the chosen font doesn't fit, it may clip.
+  int cx = GX + (GW - bw)/2 - bx;
+  int cy = GY + (GH - bh)/2 - by;
+  tft.setTextColor(C_BOX);
+  tft.setCursor(cx, cy);
+  tft.print(g);
+
+  // Restore classic
+  tft.setFont(); tft.setTextSize(1);
+
+  cgear = gear;
 }
 
 void drawPosBig(){
   if(pos==cpos) return;
   String s = String("P") + String(pos);
-  drawCenteredText(RXc+2, Y1+2, BW-4, BH-4, s, C_TX);
+  drawCenteredText_fixedFont(RXc+2, Y1+2, BW-4, BH-4, FONT_POS, s, C_TX);
   cpos=pos;
 }
 
-// Bottom-left box: last and best lap, right-aligned
 void drawLapBest() {
-bool hasLast = lapMs > 0;
-bool hasBest = bestMs > 0;
-if (lapMs == clap && bestMs == cbest) return;
+  bool hasLast = lapMs > 0;
+  bool hasBest = bestMs > 0;
+  if (lapMs == clap && bestMs == cbest) return;
 
+  int x0 = BLX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
+  tft.fillRect(x0, y0, w, h, C_BG);
 
-int x0 = BLX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
-tft.fillRect(x0, y0, w, h, C_BG);
+  tft.setFont(); tft.setTextColor(C_TX); tft.setTextSize(1);
+  const int labelOffsetX = 6;
+  const int labelOffsetY = 5;
+  tft.setCursor(x0 + labelOffsetX, y0 + labelOffsetY + 8);     tft.print("last:");
+  tft.setCursor(x0 + labelOffsetX, y0 + h/2 + labelOffsetY);   tft.print("best:");
 
+  String sLast = hasLast ? msToStr(lapMs) : String("--:--.---");
+  String sBest = hasBest ? msToStr(bestMs) : String("--:--.---");
+  tft.setFont(FONT_LAPBEST); tft.setTextSize(1);
 
-// Labels smaller, positioned left
-tft.setFont();
-tft.setTextColor(C_TX);
-tft.setTextSize(1);
+  int16_t bx, by; uint16_t bw, bh;
+  int rightEdge = x0 + w - 6;
 
+  tft.getTextBounds(sLast, 0, 0, &bx, &by, &bw, &bh);
+  int baseY1 = y0 + (h / 4) + (bh / 2) - 2;
+  tft.setCursor(rightEdge - bw, baseY1); tft.print(sLast);
 
-const int labelOffsetX = 6;
-const int labelOffsetY = 5;
-tft.setCursor(x0 + labelOffsetX, y0 + labelOffsetY + 8);
-tft.print("last:");
-tft.setCursor(x0 + labelOffsetX, y0 + h / 2 + labelOffsetY);
-tft.print("best:");
+  tft.getTextBounds(sBest, 0, 0, &bx, &by, &bw, &bh);
+  int baseY2 = y0 + (3 * h / 4) + (bh / 2) - 1;
+  tft.setCursor(rightEdge - bw, baseY2); tft.print(sBest);
 
-
-// Larger font for times
-String sLast = hasLast ? msToStr(lapMs) : String("--:--.---");
-String sBest = hasBest ? msToStr(bestMs) : String("--:--.---");
-tft.setFont(&FreeSansBold12pt7b);
-
-
-int16_t bx, by; uint16_t bw, bh;
-int rightEdge = x0 + w - 6;
-
-
-// Adjusted Y positions to bring bottom time closer to box bottom
-tft.getTextBounds(sLast, 0, 0, &bx, &by, &bw, &bh);
-int baseY1 = y0 + (h / 4) + (bh / 2) - 2;
-tft.setCursor(rightEdge - bw, baseY1);
-tft.print(sLast);
-
-
-tft.getTextBounds(sBest, 0, 0, &bx, &by, &bw, &bh);
-int baseY2 = y0 + (3 * h / 4) + (bh / 2) - 1; // slightly closer to bottom edge
-tft.setCursor(rightEdge - bw, baseY2);
-tft.print(sBest);
-
-
-tft.setFont();
-tft.setTextSize(1);
-clap = lapMs;
-cbest = bestMs;
+  tft.setFont(); tft.setTextSize(1);
+  clap = lapMs; cbest = bestMs;
 }
 
-// Bottom-right box: delta to reference. Green = gaining, Red = losing.
 static const int DELTA_BASELINE_FIX = 0;
 void drawDelta() {
-if (deltaMs == cdelta) return;
+  if (deltaMs == cdelta) return;
 
+  const int x0 = BRX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
+  tft.fillRect(x0, y0, w, h, C_BG);
 
-const int x0 = BRX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
-tft.fillRect(x0, y0, w, h, C_BG);
+  long v = deltaMs; unsigned long a = (v < 0) ? (unsigned long)(-v) : (unsigned long)v;
+  int whole = a / 1000; int frac = a % 1000; if (whole > 99) { whole = 99; frac = 999; }
+  char sign = (v < 0 ? '-' : (v > 0 ? '+' : '±'));
 
+  char buf[12];
+  if (whole < 10) snprintf(buf, sizeof(buf), "%c %d.%03d", sign, whole, frac);
+  else snprintf(buf, sizeof(buf), "%c%02d.%03d", sign, whole, frac);
 
-long v = deltaMs; unsigned long a = (v < 0) ? (unsigned long)(-v) : (unsigned long)v;
-int whole = a / 1000; int frac = a % 1000; if (whole > 99) { whole = 99; frac = 999; }
-char sign = (v < 0 ? '-' : (v > 0 ? '+' : '±'));
+  uint16_t col = (v < 0) ? C_OK : (v > 0 ? C_BAD : C_TX);
 
+  tft.setTextSize(1);
+  tft.setFont(FONT_DELTA);
+  tft.setTextColor(col);
 
-char buf[12];
-if (whole < 10) snprintf(buf, sizeof(buf), "%c %d.%03d", sign, whole, frac);
-else snprintf(buf, sizeof(buf), "%c%02d.%03d", sign, whole, frac);
+  int16_t bx, by; uint16_t bw, bh;
+  tft.getTextBounds(buf, 0, 0, &bx, &by, &bw, &bh);
+  int cx = x0 + (w - bw) / 2 - bx;
+  int cy = y0 + (h - bh) / 2 - by;
+  tft.setCursor(cx, cy); tft.print(buf);
 
-
-uint16_t col = (v < 0) ? C_OK : (v > 0 ? C_BAD : C_TX);
-
-
-tft.setTextSize(1);
-tft.setFont(&FreeSansBold18pt7b);
-tft.setTextColor(col);
-
-
-int16_t bx, by; uint16_t bw, bh;
-tft.getTextBounds(buf, 0, 0, &bx, &by, &bw, &bh);
-int cx = x0 + (w - bw) / 2 - bx;
-int cy = y0 + (h - bh) / 2 - by; // fully centered vertically
-tft.setCursor(cx, cy);
-tft.print(buf);
-
-
-tft.setFont();
-tft.setTextSize(1);
-cdelta = deltaMs;
+  tft.setFont(); tft.setTextSize(1);
+  cdelta = deltaMs;
 }
 
-// Shift light + flags
-// - Flags override: if any flag set, whole bar blinks that color.
-// - Otherwise: progressive bar from 60% to 90% of maxRpm.
+// ================== LEDs ==================
 void drawRevLEDs(){
-  unsigned long now = millis();// If we haven't had data recently, don't animate revs here.
+  unsigned long now = millis();
   if (now - lastDataTime > 2000) return;
 
-  // Flag override with blink
   static bool flashState = false; static unsigned long lastFlash = 0; const unsigned long flashPeriod = 250;
   static uint8_t lastMask = 0;
   uint8_t mask = (flagRed?8:0) | (flagYellow?4:0) | (flagBlue?2:0) | (flagGreen?1:0);
@@ -359,10 +369,9 @@ void drawRevLEDs(){
     return;
   }
 
-  // Progressive rev bar
   if (rpm < 0 || maxRpm <= 0) { clearAllLeds(); return; }
 
-  const float startPct = 0.75f; // 
+  const float startPct = 0.75f;
   const float endPct   = 0.90f;
 
   float norm = (float)rpm / (float)maxRpm;
@@ -371,7 +380,6 @@ void drawRevLEDs(){
 
   int target = round(pct * LED_COUNT);
 
-  // simple easing
   static int lastLit = 0;
   if (target > lastLit) lastLit++;
   else if (target < lastLit && (now & 1)) lastLit--;
@@ -380,7 +388,6 @@ void drawRevLEDs(){
   for (int i=0; i<LED_COUNT; i++) {
     RgbColor c = dimColor(RgbColor(0));
     if (i < lit) {
-      // Color zones: 0=green, 1-2=amber, 3-5=red, 6+=blue
       if (i == 0)      c = dimColor(RgbColor(0,255,0));
       else if (i <= 2) c = dimColor(RgbColor(255,140,0));
       else if (i <= 5) c = dimColor(RgbColor(255,0,0));
@@ -391,11 +398,11 @@ void drawRevLEDs(){
   strip.Show();
 }
 
-// ================== CSV INPUT ==================
+// ================== CSV ==================
 void readCSV(){
   static String line;
   while (Serial.available()) {
-lastDataTime = millis();
+    lastDataTime = millis();
     char ch = (char)Serial.read();
     if ((uint8_t)ch == 10) { // LF
       long v[13] = {0}; int i = 0; String tok = "";
@@ -405,9 +412,7 @@ lastDataTime = millis();
           tok.trim();
           v[i++] = tok.indexOf('.') >= 0 ? (long)tok.toFloat() : (long)tok.toInt();
           tok = "";
-        } else if ((uint8_t)c != 13) { // skip CR
-          tok += c;
-        }
+        } else if ((uint8_t)c != 13) { tok += c; }
       }
       tok.trim(); if (i < 13) v[i++] = tok.indexOf('.') >= 0 ? (long)tok.toFloat() : (long)tok.toInt();
 
@@ -438,28 +443,26 @@ lastDataTime = millis();
 void setup(){
   Serial.begin(115200);
 
-  // Kill Wi-Fi/BT
   WiFi.mode(WIFI_OFF); esp_wifi_stop();
   #ifdef ARDUINO_ARCH_ESP32
     if (btStart()) btStop();
   #endif
 
-  // Init LEDs early and once
   strip.Begin();
   clearAllLeds();
 
-  // Init TFT
   tft.begin();
   tft.setRotation(1);
+  tft.setTextWrap(false);
+  tft.setTextSize(1);
   drawStatic();
 
-  // Avoid instant NO DATA before init
   lastDataTime = millis();
 }
 
 // ================== MAIN LOOP ==================
 void loop(){
-readCSV();
+  readCSV();
 
   if (millis() - lastDataTime > 2000) {
     if (!noDataScreenActive) { drawNoDataScreen(); noDataScreenActive = true; }
@@ -468,16 +471,14 @@ readCSV();
   }
 
   if (noDataScreenActive) {
-    // Data resumed: redraw base UI and force refresh
     drawStatic(); clearAllLeds(); noDataScreenActive = false;
     crpm=-1; cspeed=-1; cgear=-999; cpos=-1; cfuel=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
   }
 
-  drawRPM();
-  drawSpeed();
+  drawSpeedRpmStack();
   drawPosBig();
   drawFuel();
-  drawGear();
+  drawGear();       // fixed font with margin
   drawLapBest();
   drawDelta();
   drawRevLEDs();

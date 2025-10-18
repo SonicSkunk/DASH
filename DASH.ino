@@ -1,10 +1,15 @@
 /*
 ESP32 SimHub Dash for ILI9341 (320x240) + 8x WS2812 LEDs
 Updates:
-- Speed + RPM stacked/centered in lower-left box; top-left box empty.
+- Top-left box shows lap counter as "cur/total" using fixed fonts (no label).
+- If TotalLaps is 0 or not provided, a graphical infinity symbol is drawn to the right of the slash.
+- Uses dedicated fixed-font constants for the lap number so it's easy to tweak.
 - GEAR uses a fixed font size (no autosizing), with a margin.
 - Margin is applied around the gear text so it never kisses the frame.
 - Removed all autosizing/font-scaling logic; fonts are fixed per area.
+- CSV parsing extended to optionally accept two additional trailing fields:
+    field 14 (index 13) = CurrentLap (GameDataCurrentLap)
+    field 15 (index 14) = TotalLaps  (GameData.TotalLaps)
 */
 
 #include <SPI.h>
@@ -61,9 +66,16 @@ int rpm=0, maxRpm=8000, speed=0, gear=0, pos=0, fuel=0;
 long lapMs=0, bestMs=0, deltaMs=0;
 int flagYellow=0, flagBlue=0, flagRed=0, flagGreen=0;
 
+// New lap counters (from SimHub)
+int curLap = 0;
+int totLaps = 0;
+
 // ================== CHANGE-TRACKING ==================
 int crpm=-1, cspeed=-1, cgear=-999, cpos=-1, cfuel=-1;
 long clap=-1, cbest=-1, cdelta=LONG_MIN/2;
+
+// change tracking for laps
+int ccurLap = -1, cTotLaps = -1;
 
 // ================== DATA FRESHNESS ==================
 unsigned long lastDataTime = 0;
@@ -104,6 +116,9 @@ static const GFXfont* FONT_POS   = &FreeSansBold24pt7b;
 static const GFXfont* FONT_FUEL  = &FreeSansBold18pt7b;
 static const GFXfont* FONT_LAPBEST = &FreeSansBold12pt7b;
 static const GFXfont* FONT_DELTA = &FreeSansBold18pt7b;
+
+// Dedicated lap counter fonts (easy to tweak independently)
+static const GFXfont* FONT_LAP_NUMBER = &FreeSansBold18pt7b; // larger current/total
 
 // ================== HELPERS ==================
 static inline String msToStr(long ms) {
@@ -168,7 +183,7 @@ void drawStatic(){
   tft.fillScreen(C_BG);
 
   // Left column
-  frame(LX,  Y1, BW, BH);              // keep empty
+  frame(LX,  Y1, BW, BH);              // top-left: will show lap counter
   frame(LX,  Y2, BW, BH_speedFuel());  // speed+rpm live here
 
   // Right column
@@ -348,6 +363,69 @@ void drawDelta() {
   cdelta = deltaMs;
 }
 
+// ================== LAP COUNTER (TOP-LEFT BOX) ==================
+void drawLapCounter() {
+  // only redraw when values change
+  if (curLap == ccurLap && totLaps == cTotLaps) return;
+
+  // clear box interior
+  tft.fillRect(LX+2, Y1+2, BW-4, BH-4, C_BG);
+
+  tft.setTextWrap(false);
+  tft.setFont(FONT_LAP_NUMBER);
+  tft.setTextSize(1);
+
+  // If total laps provided (>0) show "cur/total"
+  if (totLaps > 0) {
+    String s = String(curLap) + "/" + String(totLaps);
+
+    int16_t bx, by; uint16_t bw, bh;
+    tft.getTextBounds(s, 0, 0, &bx, &by, &bw, &bh);
+    int cx = LX + (BW - bw)/2 - bx;
+    int cy = Y1 + (BH - bh)/2 - by;
+    tft.setTextColor(C_TX);
+    tft.setCursor(cx, cy); tft.print(s);
+
+  } else {
+    // No total provided: show "cur/∞" where ∞ is drawn graphically (two overlapping circles).
+    String sLeft = String(curLap) + "/";
+
+    int16_t bx, by; uint16_t bw, bh;
+    tft.getTextBounds(sLeft, 0, 0, &bx, &by, &bw, &bh);
+
+    // size parameters for the drawn infinity symbol
+    const int r = 6;                 // circle radius
+    const int overlap = r / 2;       // overlap between the two circles
+    const int symbolW = (r*2) + (r*2 - overlap); // approximate symbol width
+    const int spacing = 6;           // space between text and symbol
+
+    int totalW = bw + spacing + symbolW;
+    int tx = LX + (BW - totalW)/2 - bx;
+    int ty = Y1 + (BH - bh)/2 - by;
+
+    tft.setTextColor(C_TX);
+    tft.setCursor(tx, ty); tft.print(sLeft);
+
+    int symbolStart = tx + bw + spacing;
+    int cx1 = symbolStart + r;
+    int cx2 = symbolStart + r + (r - overlap);
+    int ycenter = Y1 + (BH / 2);
+
+    // draw two overlapping circles as the infinity glyph
+    tft.drawCircle(cx1, ycenter, r, C_TX);
+    tft.drawCircle(cx2, ycenter, r, C_TX);
+    // optionally draw a small center connector to improve the likeness
+    tft.fillCircle(cx1 + (r - overlap/2), ycenter, 2, C_TX);
+  }
+
+  // restore classic font state
+  tft.setFont(); tft.setTextSize(1);
+
+  // update change-tracking
+  ccurLap = curLap;
+  cTotLaps = totLaps;
+}
+
 // ================== LEDs ==================
 void drawRevLEDs(){
   unsigned long now = millis();
@@ -405,8 +483,8 @@ void readCSV(){
     lastDataTime = millis();
     char ch = (char)Serial.read();
     if ((uint8_t)ch == 10) { // LF
-      long v[13] = {0}; int i = 0; String tok = "";
-      for (uint16_t k = 0; k < line.length() && i < 13; k++) {
+      long v[15] = {0}; int i = 0; String tok = "";
+      for (uint16_t k = 0; k < line.length() && i < 15; k++) {
         char c = line[k];
         if (c == ',') {
           tok.trim();
@@ -414,9 +492,13 @@ void readCSV(){
           tok = "";
         } else if ((uint8_t)c != 13) { tok += c; }
       }
-      tok.trim(); if (i < 13) v[i++] = tok.indexOf('.') >= 0 ? (long)tok.toFloat() : (long)tok.toInt();
+      tok.trim(); if (i < 15) v[i++] = tok.indexOf('.') >= 0 ? (long)tok.toFloat() : (long)tok.toInt();
 
-      if (i == 13) {
+      // We expect at least the original 13 fields. Additional trailing fields are optional:
+      // [0] rpm, [1] speed, [2] gear, [3] pos, [4] fuel, [5] lapMs, [6] bestMs, [7] deltaMs,
+      // [8] maxRpm, [9] flagYellow, [10] flagBlue, [11] flagRed, [12] flagGreen,
+      // optional [13] CurrentLap, [14] TotalLaps
+      if (i >= 13) {
         rpm     = (int)v[0];
         speed   = (int)v[1];
         gear    = (int)v[2];
@@ -430,6 +512,12 @@ void readCSV(){
         flagBlue   = (int)v[10];
         flagRed    = (int)v[11];
         flagGreen  = (int)v[12];
+
+        if (i >= 14) curLap = (int)v[13];
+        else curLap = 0;
+
+        if (i >= 15) totLaps = (int)v[14];
+        else totLaps = 0;
       }
       line = "";
     } else {
@@ -473,8 +561,10 @@ void loop(){
   if (noDataScreenActive) {
     drawStatic(); clearAllLeds(); noDataScreenActive = false;
     crpm=-1; cspeed=-1; cgear=-999; cpos=-1; cfuel=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
+    ccurLap = -1; cTotLaps = -1;
   }
 
+  drawLapCounter();   // top-left box now shows lap counter (cur/total) or cur/∞
   drawSpeedRpmStack();
   drawPosBig();
   drawFuel();

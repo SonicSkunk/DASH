@@ -1,7 +1,7 @@
 # ESP32 SimHub Dash for simracing (ILI9341 320×240 + WS2812)
 **Status:** early prototype. Functional, changing fast.
 
-ESP32 dashboard for SimHub telemetry. Renders RPM, speed, gear, position, fuel, lap/best, and delta on an ILI9341. 
+ESP32 dashboard for SimHub telemetry. Renders RPM, speed, lap counter, gear, position, fuel, lap/best, and delta on an ILI9341. 
 Drives an 8-LED shift bar via ESP32 RMT. Falls back to **NO DATA FEED** when input stops.
 
 ---

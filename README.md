@@ -51,6 +51,11 @@ Once finalized, **STL and project files will be published** in this repo.
 
 ---
 
+## To do
+- Display Pit limiter
+- reduce flickering
+- vertical spacing
+
 ## Known Issues (WIP)
 - Layout and font baselines not final; subject to change.
 - SimHub CSV sender must be configured manually.

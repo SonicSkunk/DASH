@@ -40,6 +40,7 @@ Updates:
 #include <Fonts/FreeSansBold18pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSans8pt7b.h>
+#include <Fonts/FreeSans10pt7b.h>
 
 #include <limits.h>
 
@@ -131,7 +132,7 @@ static inline int BH_speedFuel() { return (GY + GH) - Y2; }
 // Choose one fixed font per logical area (no autosizing)
 static const GFXfont* FONT_GEAR  = &FreeSansBold66pt7b;
 static const GFXfont* FONT_SPEED = &FreeSansBold24pt7b;
-static const GFXfont* FONT_RPM   = &FreeSansBold12pt7b;
+static const GFXfont* FONT_RPM   = &FreeSans10pt7b;
 static const GFXfont* FONT_POS   = &FreeSansBold24pt7b;
 static const GFXfont* FONT_LAPBEST = &FreeSansBold12pt7b;
 static const GFXfont* FONT_DELTA = &FreeSansBold18pt7b;
@@ -277,25 +278,26 @@ void drawTyreTemps() {
   int halfW = boxW / 2;
   int halfH = boxH / 2;
 
-  // top-left = Front Left (FL)
+  // NOTE: swapped order so the label is drawn on TOP and the numeric value is drawn BELOW.
+  // top-left = Front Left (FL)  -> label above value
   int x_tl = boxX;
   int y_tl = boxY;
-  drawTwoLineCentered_fixedFonts(x_tl, y_tl, halfW, halfH, FONT_TYRE_VALUE, String(tyreFL), FONT_TYRE_LABEL, String("FL"), C_TX);
+  drawTwoLineCentered_fixedFonts(x_tl, y_tl, halfW, halfH, FONT_TYRE_LABEL, String("FL"), FONT_TYRE_VALUE, String(tyreFL), C_TX);
 
-  // top-right = Front Right (FR)
+  // top-right = Front Right (FR) -> label above value
   int x_tr = boxX + halfW;
   int y_tr = boxY;
-  drawTwoLineCentered_fixedFonts(x_tr, y_tr, boxW - halfW, halfH, FONT_TYRE_VALUE, String(tyreFR), FONT_TYRE_LABEL, String("FR"), C_TX);
+  drawTwoLineCentered_fixedFonts(x_tr, y_tr, boxW - halfW, halfH, FONT_TYRE_LABEL, String("FR"), FONT_TYRE_VALUE, String(tyreFR), C_TX);
 
-  // bottom-left = Rear Left (RL)
+  // bottom-left = Rear Left (RL) -> label above value
   int x_bl = boxX;
   int y_bl = boxY + halfH;
-  drawTwoLineCentered_fixedFonts(x_bl, y_bl, halfW, boxH - halfH, FONT_TYRE_VALUE, String(tyreRL), FONT_TYRE_LABEL, String("RL"), C_TX);
+  drawTwoLineCentered_fixedFonts(x_bl, y_bl, halfW, boxH - halfH, FONT_TYRE_LABEL, String("RL"), FONT_TYRE_VALUE, String(tyreRL), C_TX);
 
-  // bottom-right = Rear Right (RR)
+  // bottom-right = Rear Right (RR) -> label above value
   int x_br = boxX + halfW;
   int y_br = boxY + halfH;
-  drawTwoLineCentered_fixedFonts(x_br, y_br, boxW - halfW, boxH - halfH, FONT_TYRE_VALUE, String(tyreRR), FONT_TYRE_LABEL, String("RR"), C_TX);
+  drawTwoLineCentered_fixedFonts(x_br, y_br, boxW - halfW, boxH - halfH, FONT_TYRE_LABEL, String("RR"), FONT_TYRE_VALUE, String(tyreRR), C_TX);
 
   // update change-tracking
   cTyreFL = tyreFL; cTyreFR = tyreFR; cTyreRL = tyreRL; cTyreRR = tyreRR;
@@ -352,26 +354,49 @@ void drawLapBest() {
   int x0 = BLX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
   tft.fillRect(x0, y0, w, h, C_BG);
 
-  tft.setFont(); tft.setTextColor(C_TX); tft.setTextSize(1);
-  const int labelOffsetX = 6;
-  const int labelOffsetY = 5;
-  tft.setCursor(x0 + labelOffsetX, y0 + labelOffsetY + 8);     tft.print("last:");
-  tft.setCursor(x0 + labelOffsetX, y0 + h/2 + labelOffsetY);   tft.print("best:");
-
+  // Prepare time strings
   String sLast = hasLast ? msToStr(lapMs) : String("--:--.---");
   String sBest = hasBest ? msToStr(bestMs) : String("--:--.---");
+
+  // Measure times using FONT_LAPBEST
   tft.setFont(FONT_LAPBEST); tft.setTextSize(1);
+  int16_t tbxL, tbyL; uint16_t tbwL, tbhL;
+  tft.getTextBounds(sLast, 0, 0, &tbxL, &tbyL, &tbwL, &tbhL);
 
-  int16_t bx, by; uint16_t bw, bh;
+  int16_t tbxB, tbyB; uint16_t tbwB, tbhB;
+  tft.getTextBounds(sBest, 0, 0, &tbxB, &tbyB, &tbwB, &tbhB);
+
   int rightEdge = x0 + w - 6;
+  int baseY1 = y0 + (h / 4) + (tbhL / 2) - 2;
+  int baseY2 = y0 + (3 * h / 4) + (tbhB / 2) - 1;
 
-  tft.getTextBounds(sLast, 0, 0, &bx, &by, &bw, &bh);
-  int baseY1 = y0 + (h / 4) + (bh / 2) - 2;
-  tft.setCursor(rightEdge - bw, baseY1); tft.print(sLast);
+  // Measure labels using the tyre label font
+  tft.setFont(FONT_TYRE_LABEL); tft.setTextSize(1);
+  int16_t lbx, lby; uint16_t lbw, lbh;
+  tft.getTextBounds("last:", 0, 0, &lbx, &lby, &lbw, &lbh);
 
-  tft.getTextBounds(sBest, 0, 0, &bx, &by, &bw, &bh);
-  int baseY2 = y0 + (3 * h / 4) + (bh / 2) - 1;
-  tft.setCursor(rightEdge - bw, baseY2); tft.print(sBest);
+  int16_t lbx2, lby2; uint16_t lbw2, lbh2;
+  tft.getTextBounds("best:", 0, 0, &lbx2, &lby2, &lbw2, &lbh2);
+
+  const int labelOffsetX = 6;
+
+  // Align label baselines to be vertically centered relative to the corresponding time
+  int labelY1 = baseY1 + ((int)tbhL - (int)lbh) / 2;
+  int labelY2 = baseY2 + ((int)tbhB - (int)lbh2) / 2;
+
+  // Print labels (left side)
+  tft.setTextColor(C_TX);
+  tft.setFont(FONT_TYRE_LABEL); tft.setTextSize(1);
+  tft.setCursor(x0 + labelOffsetX - lbx, labelY1); tft.print("last:");
+  tft.setCursor(x0 + labelOffsetX - lbx2, labelY2); tft.print("best:");
+
+  // Print times (right aligned)
+  tft.setFont(FONT_LAPBEST); tft.setTextSize(1);
+  tft.getTextBounds(sLast, 0, 0, &tbxL, &tbyL, &tbwL, &tbhL);
+  tft.setCursor(rightEdge - tbwL, baseY1); tft.print(sLast);
+
+  tft.getTextBounds(sBest, 0, 0, &tbxB, &tbyB, &tbwB, &tbhB);
+  tft.setCursor(rightEdge - tbwB, baseY2); tft.print(sBest);
 
   tft.setFont(); tft.setTextSize(1);
   clap = lapMs; cbest = bestMs;
@@ -628,6 +653,6 @@ void loop(){
   drawGear();       // fixed font with margin
   drawLapBest();
   drawDelta();
-  drawTyreTemps();  // new: split right-bottom into 4 tyre temp rectangles
+  drawTyreTemps();  // new: split right-bottom into 4 tyre temp rectangles (label now on top)
   drawRevLEDs();
 }

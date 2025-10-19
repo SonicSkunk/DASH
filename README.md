@@ -52,9 +52,7 @@ Once finalized, **STL and project files will be published** in this repo.
 ---
 
 ## Known Issues (WIP)
-- Occasional LED lag if the serial feed is inconsistent.
 - Layout and font baselines not final; subject to change.
-- Delta vertical centering uses a small baseline fix.
 - SimHub CSV sender must be configured manually.
 - Refresh flickering
 

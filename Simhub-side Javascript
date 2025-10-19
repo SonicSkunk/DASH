@@ -1,9 +1,28 @@
-// ---- CLEAN SIMHUB SCRIPT ----
-// CSV: RPM,SPEED,GEAR,POSITION,FUEL,LAP_MS,BEST_MS,DELTA_MS,MAXRPM,FLAG_Y,FLAG_B,FLAG_R,FLAG_G, CURRENT_LAP, TOTAL_LAPS
+// ---- CLEAN SIMHUB SCRIPT (robust delta picker + tyre temps) ----
+// CSV fields (returned):
+// 0  RPM
+// 1  SPEED
+// 2  GEAR
+// 3  POSITION
+// 4  FUEL
+// 5  LAP_MS
+// 6  BEST_MS
+// 7  DELTA_MS
+// 8  MAXRPM
+// 9  FLAG_Y
+// 10 FLAG_B
+// 11 FLAG_R
+// 12 FLAG_G
+// 13 CURRENT_LAP
+// 14 TOTAL_LAPS
+// 15 TYRE_FL (TyreTemperatureFrontLeft)
+// 16 TYRE_FR (TyreTemperatureFrontRight)
+// 17 TYRE_RL (TyreTemperatureRearLeft)
+// 18 TYRE_RR (TyreTemperatureRearRight)
 //
-// NOTE: This appends two optional trailing fields:
-//   field 14 (index 13) = CurrentLap (integer, 0 if unknown)
-//   field 15 (index 14) = TotalLaps  (integer, 0 if unknown => dash will treat as "infinite")
+// NOTE: dash expects tyre temps in the order FL, FR, RL, RR at indices 15..18 (0-based).
+// If your SimHub profile uses different property names, I included fallbacks: short-name (GameData.*)
+// and DataCorePlugin prefix. Adjust if needed.
 
 function safe(v){ return (v===null||v===undefined||v===""||v==="NaN"||isNaN(v)) ? 0 : v; }
 function int(v){ v = safe(v); return Math.round(parseFloat(v)) || 0; }
@@ -79,7 +98,6 @@ let flagRed    = int($prop('DataCorePlugin.GameData.Flag_Red'))    ? 1 : 0;
 let flagGreen  = int($prop('DataCorePlugin.GameData.Flag_Green'))  ? 1 : 0;
 
 // --- Lap counters (robust lookup across common property names) ---
-// Prefer DataCorePlugin.GameData.CurrentLap / TotalLaps but fall back to other known names.
 let curLap = int($prop('DataCorePlugin.GameData.CurrentLap')) ||
              int($prop('PersistantTrackerPlugin.CurrentLap')) ||
              int($prop('GameData.CurrentLap')) || 0;
@@ -88,10 +106,25 @@ let totLaps = int($prop('DataCorePlugin.GameData.TotalLaps')) ||
               int($prop('PersistantTrackerPlugin.TotalLaps')) ||
               int($prop('GameData.TotalLaps')) || 0;
 
-// Return CSV line: existing 13 fields + curLap + totLaps
+// --- Tyre temperatures (robust property lookup) ---
+// Prefer DataCorePlugin.GameData.* but fall back to GameData.* names.
+let tyreFL = int($prop('DataCorePlugin.GameData.TyreTemperatureFrontLeft')) ||
+             int($prop('GameData.TyreTemperatureFrontLeft')) || 0;
+
+let tyreFR = int($prop('DataCorePlugin.GameData.TyreTemperatureFrontRight')) ||
+             int($prop('GameData.TyreTemperatureFrontRight')) || 0;
+
+let tyreRL = int($prop('DataCorePlugin.GameData.TyreTemperatureRearLeft')) ||
+             int($prop('GameData.TyreTemperatureRearLeft')) || 0;
+
+let tyreRR = int($prop('DataCorePlugin.GameData.TyreTemperatureRearRight')) ||
+             int($prop('GameData.TyreTemperatureRearRight')) || 0;
+
+// Return CSV line: existing fields + curLap + totLaps + tyre temps (FL,FR,RL,RR)
 return [
   rpm, speed, gear, pos, fuel,
   lapMs, bestMs, deltaMs, maxRpm,
   flagYellow, flagBlue, flagRed, flagGreen,
-  curLap, totLaps
+  curLap, totLaps,
+  tyreFL, tyreFR, tyreRL, tyreRR
 ].join(',') + "\n";

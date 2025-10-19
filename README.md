@@ -17,7 +17,7 @@ Drives an 8-LED shift bar via ESP32 RMT. Falls back to **NO DATA FEED** when inp
 ---
 
 <p align="center">
-  <img src="Images/dash.jpg" width="800">
+  <img src="Images/Dash.jpg" width="800">
 </p>
 
 ## Hardware

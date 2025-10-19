@@ -1,25 +1,9 @@
 /*
 ESP32 SimHub Dash for ILI9341 (320x240) + 8x WS2812 LEDs
-Updates:
-- Top-left box shows lap counter as "cur/total" using fixed fonts (no label).
-- If TotalLaps is 0 or not provided, a graphical infinity symbol is drawn to the right of the slash.
-- Uses dedicated fixed-font constants for the lap number so it’s easy to tweak.
-- GEAR uses a fixed font size (no autosizing), with a margin.
-- Margin is applied around the gear text so it never kisses the frame.
-- Removed all autosizing/font-scaling logic; fonts are fixed per area.
-- CSV parsing extended to optionally accept two additional trailing fields:
-    field 14 (index 13) = CurrentLap (GameDataCurrentLap)
-    field 15 (index 14) = TotalLaps  (GameData.TotalLaps)
-- Removed fuel-related UI and logic; the right-bottom box is now split into 4 equal rectangles
-  showing tyre temperatures:
-    top-left = Front Left, top-right = Front Right,
-    bottom-left = Rear Left, bottom-right = Rear Right
-  NOTE: The code expects tyre temps (if present) as additional trailing CSV fields in this order:
-    index 15 -> TyreTemperatureFrontLeft
-    index 16 -> TyreTemperatureFrontRight
-    index 17 -> TyreTemperatureRearLeft
-    index 18 -> TyreTemperatureRearRight
-  If your SimHub CSV orders these differently, adjust the indices in readCSV() accordingly.
+Flickerless display + ORIGINAL LED REV BAR behavior
+- Offscreen per-box canvases (GFXcanvas16) then blit with drawRGBBitmap()
+- No startWrite/endWrite wrapping
+- LED bar logic reverted to your original easing + unconditional Show()
 */
 
 #include <SPI.h>
@@ -78,24 +62,17 @@ int rpm=0, maxRpm=8000, speed=0, gear=0, pos=0;
 long lapMs=0, bestMs=0, deltaMs=0;
 int flagYellow=0, flagBlue=0, flagRed=0, flagGreen=0;
 
-// Tyre temperatures (new)
-int tyreFL = 0; // front-left (top-left)
-int tyreFR = 0; // front-right (top-right)
-int tyreRL = 0; // rear-left (bottom-left)
-int tyreRR = 0; // rear-right (bottom-right)
+// Tyre temperatures
+int tyreFL = 0, tyreFR = 0, tyreRL = 0, tyreRR = 0;
 
-// New lap counters (from SimHub)
+// Lap counters
 int curLap = 0;
 int totLaps = 0;
 
 // ================== CHANGE-TRACKING ==================
 int crpm=-1, cspeed=-1, cgear=-999, cpos=-1;
 long clap=-1, cbest=-1, cdelta=LONG_MIN/2;
-
-// change tracking for laps
 int ccurLap = -1, cTotLaps = -1;
-
-// change tracking for tyres
 int cTyreFL = INT_MIN, cTyreFR = INT_MIN, cTyreRL = INT_MIN, cTyreRR = INT_MIN;
 
 // ================== DATA FRESHNESS ==================
@@ -129,20 +106,15 @@ const int BRX = BLX + BBW + M;
 static inline int BH_speedFuel() { return (GY + GH) - Y2; }
 
 // ================== FIXED FONTS ==================
-// Choose one fixed font per logical area (no autosizing)
-static const GFXfont* FONT_GEAR  = &FreeSansBold66pt7b;
-static const GFXfont* FONT_SPEED = &FreeSansBold24pt7b;
-static const GFXfont* FONT_RPM   = &FreeSans10pt7b;
-static const GFXfont* FONT_POS   = &FreeSansBold24pt7b;
-static const GFXfont* FONT_LAPBEST = &FreeSansBold12pt7b;
-static const GFXfont* FONT_DELTA = &FreeSansBold18pt7b;
-
-// Tyre fonts
+static const GFXfont* FONT_GEAR       = &FreeSansBold66pt7b;
+static const GFXfont* FONT_SPEED      = &FreeSansBold24pt7b;
+static const GFXfont* FONT_RPM        = &FreeSans10pt7b;
+static const GFXfont* FONT_POS        = &FreeSansBold24pt7b;
+static const GFXfont* FONT_LAPBEST    = &FreeSansBold12pt7b;
+static const GFXfont* FONT_DELTA      = &FreeSansBold18pt7b;
 static const GFXfont* FONT_TYRE_VALUE = &FreeSansBold12pt7b;
 static const GFXfont* FONT_TYRE_LABEL = &FreeSans8pt7b;
-
-// Dedicated lap counter fonts (easy to tweak independently)
-static const GFXfont* FONT_LAP_NUMBER = &FreeSansBold18pt7b; // larger current/total
+static const GFXfont* FONT_LAP_NUMBER = &FreeSansBold18pt7b;
 
 // ================== HELPERS ==================
 static inline String msToStr(long ms) {
@@ -152,41 +124,37 @@ static inline String msToStr(long ms) {
   snprintf(b, sizeof(b), "%s%ld:%02ld.%03ld", neg?"-":"", mm, ss, sss);
   return String(b);
 }
-
 void frame(int x,int y,int w,int h){ tft.drawRect(x,y,w,h,C_BOX); }
 
-// Center a single-string using a fixed font
-static void drawCenteredText_fixedFont(int x,int y,int w,int h,const GFXfont* font,const String& s,uint16_t col){
-  // fixed the parameter name typo (was 'intw' which caused compile error)
-  int xx = x, yy = y, ww = w;
-  tft.fillRect(xx+2,yy+2,ww-4,h-4,C_BG);
-  tft.setFont(font);
-  tft.setTextSize(1);
+// Canvas-only helpers
+static void centeredText_onCanvas(GFXcanvas16& cv,int x,int y,int w,int h,const GFXfont* font,const String& s,uint16_t col, uint16_t bg){
+  cv.fillRect(x+2,y+2,w-4,h-4,bg);
+  cv.setTextWrap(false);
+  cv.setFont(font);
+  cv.setTextSize(1);
   int16_t bx,by; uint16_t bw,bh;
-  tft.getTextBounds(s, 0, 0, &bx, &by, &bw, &bh);
-  int cx = xx + (ww - bw)/2 - bx;
-  int cy = yy + (h - bh)/2 - by;
-  tft.setTextColor(col);
-  tft.setCursor(cx, cy);
-  tft.print(s);
-  tft.setFont(); // restore classic
+  cv.getTextBounds(s, 0, 0, &bx, &by, &bw, &bh);
+  int cx = x + (w - bw)/2 - bx;
+  int cy = y + (h - bh)/2 - by;
+  cv.setTextColor(col);
+  cv.setCursor(cx, cy);
+  cv.print(s);
+  cv.setFont();
+  cv.setTextSize(1);
 }
 
-// Two-line stacked text with fixed fonts (topFont for top, botFont for bottom)
-static void drawTwoLineCentered_fixedFonts(int x,int y,int w,int h,const GFXfont* topFont,const String& top,const GFXfont* botFont,const String& bottom,uint16_t col){
+static void twoLine_onCanvas(GFXcanvas16& cv,int x,int y,int w,int h,const GFXfont* topFont,const String& top,const GFXfont* botFont,const String& bottom,uint16_t col, uint16_t bg){
   const int gap = 6;
-  tft.fillRect(x+2,y+2,w-4,h-4,C_BG);
-  tft.setTextWrap(false);
+  cv.fillRect(x+2,y+2,w-4,h-4,bg);
+  cv.setTextWrap(false);
 
-  // measure top
-  tft.setFont(topFont); tft.setTextSize(1);
+  cv.setFont(topFont); cv.setTextSize(1);
   int16_t tbx,tby; uint16_t tbw,tbh;
-  tft.getTextBounds(top, 0, 0, &tbx, &tby, &tbw, &tbh);
+  cv.getTextBounds(top, 0, 0, &tbx, &tby, &tbw, &tbh);
 
-  // measure bottom
-  tft.setFont(botFont); tft.setTextSize(1);
+  cv.setFont(botFont); cv.setTextSize(1);
   int16_t bbx,bby; uint16_t bbw,bbh;
-  tft.getTextBounds(bottom, 0, 0, &bbx, &bby, &bbw, &bbh);
+  cv.getTextBounds(bottom, 0, 0, &bbx, &bby, &bbw, &bbh);
 
   int totalH = (int)tbh + gap + (int)bbh;
   int blockTop = y + (h - totalH)/2;
@@ -197,11 +165,24 @@ static void drawTwoLineCentered_fixedFonts(int x,int y,int w,int h,const GFXfont
   int cxTop = x + (w - tbw)/2 - tbx;
   int cxBot = x + (w - bbw)/2 - bbx;
 
-  tft.setTextColor(col);
-  tft.setFont(topFont); tft.setCursor(cxTop, topBaseline); tft.print(top);
-  tft.setFont(botFont); tft.setCursor(cxBot, botBaseline); tft.print(bottom);
+  cv.setTextColor(col);
+  cv.setFont(topFont); cv.setCursor(cxTop, topBaseline); cv.print(top);
+  cv.setFont(botFont); cv.setCursor(cxBot, botBaseline); cv.print(bottom);
 
-  tft.setFont(); // restore classic
+  cv.setFont(); cv.setTextSize(1);
+}
+
+// ================== OFFSCREEN CANVASES ==================
+GFXcanvas16 *cvLap      = nullptr; // top-left inner (BW-4 x BH-4)
+GFXcanvas16 *cvSpeedRpm = nullptr; // left-bottom inner (BW-4 x BH_speedFuel()-4)
+GFXcanvas16 *cvPos      = nullptr; // right-top inner (BW-4 x BH-4)
+GFXcanvas16 *cvTyres    = nullptr; // right-bottom inner (BW-4 x BH_speedFuel()-4)
+GFXcanvas16 *cvGear     = nullptr; // center inner (GW-4 x GH-4)
+GFXcanvas16 *cvLapBest  = nullptr; // bottom-left inner (BBW-8 x BOT_H-6)
+GFXcanvas16 *cvDelta    = nullptr; // bottom-right inner
+
+inline void blit(int x,int y,GFXcanvas16& c){
+  tft.drawRGBBitmap(x, y, c.getBuffer(), c.width(), c.height());
 }
 
 // ================== STATIC BACKGROUND ==================
@@ -209,12 +190,12 @@ void drawStatic(){
   tft.fillScreen(C_BG);
 
   // Left column
-  frame(LX,  Y1, BW, BH);              // top-left: will show lap counter
-  frame(LX,  Y2, BW, BH_speedFuel());  // speed+rpm live here
+  frame(LX,  Y1, BW, BH);              // lap counter
+  frame(LX,  Y2, BW, BH_speedFuel());  // speed+rpm
 
   // Right column
-  frame(RXc, Y1, BW, BH);              // position box
-  frame(RXc, Y2, BW, BH_speedFuel());  // tyre temps box (split into 4)
+  frame(RXc, Y1, BW, BH);              // position
+  frame(RXc, Y2, BW, BH_speedFuel());  // tyres
 
   // Center gear box
   frame(GX,  GY, GW, GH);
@@ -256,93 +237,83 @@ void clearAllLeds() {
   strip.Show();
 }
 
-// ================== DYNAMIC DRAW ==================
+// ================== DYNAMIC DRAW (to canvases) ==================
 void drawSpeedRpmStack(){
+  static unsigned long lastDraw = 0;
   if (speed == cspeed && rpm == crpm) return;
-  // fixed fonts: speed top, rpm bottom
-  drawTwoLineCentered_fixedFonts(LX, Y2, BW, BH_speedFuel(), FONT_SPEED, String(speed), FONT_RPM, String(rpm), C_TX);
-  cspeed = speed; crpm = rpm;
+  unsigned long now = millis();
+  if (now - lastDraw < 25) return; // ~40 Hz
+
+  cvSpeedRpm->fillScreen(C_BG);
+  twoLine_onCanvas(*cvSpeedRpm, 0, 0, cvSpeedRpm->width(), cvSpeedRpm->height(),
+                   FONT_SPEED, String(speed), FONT_RPM, String(rpm), C_TX, C_BG);
+
+  blit(LX+2, Y2+2, *cvSpeedRpm);
+  cspeed = speed; crpm = rpm; lastDraw = now;
 }
 
-// ================== TYRE TEMPS (split right-bottom box into 4) ==================
 void drawTyreTemps() {
+  static unsigned long lastDraw = 0;
   if (tyreFL == cTyreFL && tyreFR == cTyreFR && tyreRL == cTyreRL && tyreRR == cTyreRR) return;
+  unsigned long now = millis();
+  if (now - lastDraw < 33) return; // ~30 Hz
 
-  // compute sub-rectangles inside the right-bottom box
-  int boxX = RXc + 2;
-  int boxY = Y2 + 2;
-  int boxW = BW - 4;
-  int boxH = BH_speedFuel() - 4;
+  cvTyres->fillScreen(C_BG);
 
-  // split into 2 x 2 grid
+  int boxW = cvTyres->width();
+  int boxH = cvTyres->height();
   int halfW = boxW / 2;
   int halfH = boxH / 2;
 
-  // NOTE: swapped order so the label is drawn on TOP and the numeric value is drawn BELOW.
-  // top-left = Front Left (FL)  -> label above value
-  int x_tl = boxX;
-  int y_tl = boxY;
-  drawTwoLineCentered_fixedFonts(x_tl, y_tl, halfW, halfH, FONT_TYRE_LABEL, String("FL"), FONT_TYRE_VALUE, String(tyreFL), C_TX);
+  twoLine_onCanvas(*cvTyres, 0, 0, halfW, halfH,  FONT_TYRE_LABEL, "FL", FONT_TYRE_VALUE, String(tyreFL), C_TX, C_BG);
+  twoLine_onCanvas(*cvTyres, halfW, 0, boxW-halfW, halfH,  FONT_TYRE_LABEL, "FR", FONT_TYRE_VALUE, String(tyreFR), C_TX, C_BG);
+  twoLine_onCanvas(*cvTyres, 0, halfH, halfW, boxH-halfH,  FONT_TYRE_LABEL, "RL", FONT_TYRE_VALUE, String(tyreRL), C_TX, C_BG);
+  twoLine_onCanvas(*cvTyres, halfW, halfH, boxW-halfW, boxH-halfH,  FONT_TYRE_LABEL, "RR", FONT_TYRE_VALUE, String(tyreRR), C_TX, C_BG);
 
-  // top-right = Front Right (FR) -> label above value
-  int x_tr = boxX + halfW;
-  int y_tr = boxY;
-  drawTwoLineCentered_fixedFonts(x_tr, y_tr, boxW - halfW, halfH, FONT_TYRE_LABEL, String("FR"), FONT_TYRE_VALUE, String(tyreFR), C_TX);
+  blit(RXc+2, Y2+2, *cvTyres);
 
-  // bottom-left = Rear Left (RL) -> label above value
-  int x_bl = boxX;
-  int y_bl = boxY + halfH;
-  drawTwoLineCentered_fixedFonts(x_bl, y_bl, halfW, boxH - halfH, FONT_TYRE_LABEL, String("RL"), FONT_TYRE_VALUE, String(tyreRL), C_TX);
-
-  // bottom-right = Rear Right (RR) -> label above value
-  int x_br = boxX + halfW;
-  int y_br = boxY + halfH;
-  drawTwoLineCentered_fixedFonts(x_br, y_br, boxW - halfW, boxH - halfH, FONT_TYRE_LABEL, String("RR"), FONT_TYRE_VALUE, String(tyreRR), C_TX);
-
-  // update change-tracking
   cTyreFL = tyreFL; cTyreFR = tyreFR; cTyreRL = tyreRL; cTyreRR = tyreRR;
+  lastDraw = now;
 }
 
-// ========== GEAR FIXED FONT WITH MARGIN ==========
 void drawGear(){
+  static unsigned long lastDraw = 0;
   if (gear == cgear) return;
+  unsigned long now = millis();
+  if (now - lastDraw < 25) return;
+
   String g = (gear<0) ? "R" : (gear==0) ? "N" : String(gear);
 
-  // Clear box interior
-  tft.fillRect(GX+2, GY+2, GW-4, GH-4, C_BG);
-
-  // Fixed font for gear
-  const GFXfont* chosen = FONT_GEAR;
-
-  // Margin inside the box so the glyphs don't touch the frame
-  const int pad = 6;  // tweak if you want more/less air
-  const int maxW = GW - 2*pad;
-  const int maxH = GH - 2*pad;
-
-  tft.setTextWrap(false);
-  tft.setFont(chosen);
-  tft.setTextSize(1);
+  cvGear->fillScreen(C_BG);
+  cvGear->setTextWrap(false);
+  cvGear->setFont(FONT_GEAR);
+  cvGear->setTextSize(1);
 
   int16_t bx, by; uint16_t bw, bh;
-  tft.getTextBounds(g, 0, 0, &bx, &by, &bw, &bh);
+  cvGear->getTextBounds(g, 0, 0, &bx, &by, &bw, &bh);
 
-  // Note: we no longer autosize. If the chosen font doesn't fit, it may clip.
-  int cx = GX + (GW - bw)/2 - bx;
-  int cy = GY + (GH - bh)/2 - by;
-  tft.setTextColor(C_BOX);
-  tft.setCursor(cx, cy);
-  tft.print(g);
+  int cx = (cvGear->width()  - bw)/2 - bx;
+  int cy = (cvGear->height() - bh)/2 - by;
 
-  // Restore classic
-  tft.setFont(); tft.setTextSize(1);
+  cvGear->setTextColor(C_BOX);
+  cvGear->setCursor(cx, cy);
+  cvGear->print(g);
+  cvGear->setFont(); cvGear->setTextSize(1);
 
-  cgear = gear;
+  blit(GX+2, GY+2, *cvGear);
+
+  cgear = gear; lastDraw = now;
 }
 
 void drawPosBig(){
   if(pos==cpos) return;
+
+  cvPos->fillScreen(C_BG);
   String s = String("P") + String(pos);
-  drawCenteredText_fixedFont(RXc+2, Y1+2, BW-4, BH-4, FONT_POS, s, C_TX);
+  centeredText_onCanvas(*cvPos, 0, 0, cvPos->width(), cvPos->height(), FONT_POS, s, C_TX, C_BG);
+
+  blit(RXc+2, Y1+2, *cvPos);
+
   cpos=pos;
 }
 
@@ -351,54 +322,47 @@ void drawLapBest() {
   bool hasBest = bestMs > 0;
   if (lapMs == clap && bestMs == cbest) return;
 
-  int x0 = BLX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
-  tft.fillRect(x0, y0, w, h, C_BG);
+  cvLapBest->fillScreen(C_BG);
 
-  // Prepare time strings
   String sLast = hasLast ? msToStr(lapMs) : String("--:--.---");
   String sBest = hasBest ? msToStr(bestMs) : String("--:--.---");
 
-  // Measure times using FONT_LAPBEST
-  tft.setFont(FONT_LAPBEST); tft.setTextSize(1);
+  cvLapBest->setFont(FONT_LAPBEST); cvLapBest->setTextSize(1);
   int16_t tbxL, tbyL; uint16_t tbwL, tbhL;
-  tft.getTextBounds(sLast, 0, 0, &tbxL, &tbyL, &tbwL, &tbhL);
+  cvLapBest->getTextBounds(sLast, 0, 0, &tbxL, &tbyL, &tbwL, &tbhL);
 
   int16_t tbxB, tbyB; uint16_t tbwB, tbhB;
-  tft.getTextBounds(sBest, 0, 0, &tbxB, &tbyB, &tbwB, &tbhB);
+  cvLapBest->getTextBounds(sBest, 0, 0, &tbxB, &tbyB, &tbwB, &tbhB);
 
-  int rightEdge = x0 + w - 6;
-  int baseY1 = y0 + (h / 4) + (tbhL / 2) - 2;
-  int baseY2 = y0 + (3 * h / 4) + (tbhB / 2) - 1;
+  int rightEdge = cvLapBest->width() - 6;
+  int baseY1 = (cvLapBest->height() / 4) + (tbhL / 2) - 2;
+  int baseY2 = (3 * cvLapBest->height() / 4) + (tbhB / 2) - 1;
 
-  // Measure labels using the tyre label font
-  tft.setFont(FONT_TYRE_LABEL); tft.setTextSize(1);
+  cvLapBest->setFont(FONT_TYRE_LABEL); cvLapBest->setTextSize(1);
   int16_t lbx, lby; uint16_t lbw, lbh;
-  tft.getTextBounds("last:", 0, 0, &lbx, &lby, &lbw, &lbh);
-
+  cvLapBest->getTextBounds("last:", 0, 0, &lbx, &lby, &lbw, &lbh);
   int16_t lbx2, lby2; uint16_t lbw2, lbh2;
-  tft.getTextBounds("best:", 0, 0, &lbx2, &lby2, &lbw2, &lbh2);
+  cvLapBest->getTextBounds("best:", 0, 0, &lbx2, &lby2, &lbw2, &lbh2);
 
   const int labelOffsetX = 6;
-
-  // Align label baselines to be vertically centered relative to the corresponding time
   int labelY1 = baseY1 + ((int)tbhL - (int)lbh) / 2;
   int labelY2 = baseY2 + ((int)tbhB - (int)lbh2) / 2;
 
-  // Print labels (left side)
-  tft.setTextColor(C_TX);
-  tft.setFont(FONT_TYRE_LABEL); tft.setTextSize(1);
-  tft.setCursor(x0 + labelOffsetX - lbx, labelY1); tft.print("last:");
-  tft.setCursor(x0 + labelOffsetX - lbx2, labelY2); tft.print("best:");
+  cvLapBest->setTextColor(C_TX);
+  cvLapBest->setCursor(labelOffsetX - lbx, labelY1); cvLapBest->print("last:");
+  cvLapBest->setCursor(labelOffsetX - lbx2, labelY2); cvLapBest->print("best:");
 
-  // Print times (right aligned)
-  tft.setFont(FONT_LAPBEST); tft.setTextSize(1);
-  tft.getTextBounds(sLast, 0, 0, &tbxL, &tbyL, &tbwL, &tbhL);
-  tft.setCursor(rightEdge - tbwL, baseY1); tft.print(sLast);
+  cvLapBest->setFont(FONT_LAPBEST); cvLapBest->setTextSize(1);
+  cvLapBest->getTextBounds(sLast, 0, 0, &tbxL, &tbyL, &tbwL, &tbhL);
+  cvLapBest->setCursor(rightEdge - tbwL, baseY1); cvLapBest->print(sLast);
 
-  tft.getTextBounds(sBest, 0, 0, &tbxB, &tbyB, &tbwB, &tbhB);
-  tft.setCursor(rightEdge - tbwB, baseY2); tft.print(sBest);
+  cvLapBest->getTextBounds(sBest, 0, 0, &tbxB, &tbyB, &tbwB, &tbhB);
+  cvLapBest->setCursor(rightEdge - tbwB, baseY2); cvLapBest->print(sBest);
 
-  tft.setFont(); tft.setTextSize(1);
+  cvLapBest->setFont(); cvLapBest->setTextSize(1);
+
+  blit(BLX+4, BOT_Y+3, *cvLapBest);
+
   clap = lapMs; cbest = bestMs;
 }
 
@@ -406,8 +370,7 @@ static const int DELTA_BASELINE_FIX = 0;
 void drawDelta() {
   if (deltaMs == cdelta) return;
 
-  const int x0 = BRX + 4, y0 = BOT_Y + 3, w = BBW - 8, h = BOT_H - 6;
-  tft.fillRect(x0, y0, w, h, C_BG);
+  cvDelta->fillScreen(C_BG);
 
   long v = deltaMs; unsigned long a = (v < 0) ? (unsigned long)(-v) : (unsigned long)v;
   int whole = a / 1000; int frac = a % 1000; if (whole > 99) { whole = 99; frac = 999; }
@@ -419,90 +382,90 @@ void drawDelta() {
 
   uint16_t col = (v < 0) ? C_OK : (v > 0 ? C_BAD : C_TX);
 
-  tft.setTextSize(1);
-  tft.setFont(FONT_DELTA);
-  tft.setTextColor(col);
+  cvDelta->setTextSize(1);
+  cvDelta->setFont(FONT_DELTA);
+  cvDelta->setTextColor(col);
 
   int16_t bx, by; uint16_t bw, bh;
-  tft.getTextBounds(buf, 0, 0, &bx, &by, &bw, &bh);
-  int cx = x0 + (w - bw) / 2 - bx;
-  int cy = y0 + (h - bh) / 2 - by;
-  tft.setCursor(cx, cy); tft.print(buf);
+  cvDelta->getTextBounds(buf, 0, 0, &bx, &by, &bw, &bh);
+  int cx = (cvDelta->width() - bw) / 2 - bx;
+  int cy = (cvDelta->height() - bh) / 2 - by + DELTA_BASELINE_FIX;
+  cvDelta->setCursor(cx, cy); cvDelta->print(buf);
 
-  tft.setFont(); tft.setTextSize(1);
+  cvDelta->setFont(); cvDelta->setTextSize(1);
+
+  blit(BRX+4, BOT_Y+3, *cvDelta);
+
   cdelta = deltaMs;
 }
 
-// ================== LAP COUNTER (TOP-LEFT BOX) ==================
+// ================== LAP COUNTER ==================
 void drawLapCounter() {
-  // only redraw when values change
   if (curLap == ccurLap && totLaps == cTotLaps) return;
 
-  // clear box interior
-  tft.fillRect(LX+2, Y1+2, BW-4, BH-4, C_BG);
+  cvLap->fillScreen(C_BG);
 
-  tft.setTextWrap(false);
-  tft.setFont(FONT_LAP_NUMBER);
-  tft.setTextSize(1);
-
-  // If total laps provided (>0) show "cur/total"
   if (totLaps > 0) {
     String s = String(curLap) + "/" + String(totLaps);
 
+    cvLap->setFont(FONT_LAP_NUMBER);
+    cvLap->setTextSize(1);
     int16_t bx, by; uint16_t bw, bh;
-    tft.getTextBounds(s, 0, 0, &bx, &by, &bw, &bh);
-    int cx = LX + (BW - bw)/2 - bx;
-    int cy = Y1 + (BH - bh)/2 - by;
-    tft.setTextColor(C_TX);
-    tft.setCursor(cx, cy); tft.print(s);
+    cvLap->getTextBounds(s, 0, 0, &bx, &by, &bw, &bh);
+    int cx = (cvLap->width() - bw)/2 - bx;
+    int cy = (cvLap->height() - bh)/2 - by;
+    cvLap->setTextColor(C_TX);
+    cvLap->setCursor(cx, cy); cvLap->print(s);
+    cvLap->setFont(); cvLap->setTextSize(1);
 
   } else {
-    // No total provided: show "cur/∞" where ∞ is drawn graphically (two overlapping circles).
+    // "cur/∞" with drawn infinity
     String sLeft = String(curLap) + "/";
-
+    cvLap->setFont(FONT_LAP_NUMBER);
+    cvLap->setTextSize(1);
     int16_t bx, by; uint16_t bw, bh;
-    tft.getTextBounds(sLeft, 0, 0, &bx, &by, &bw, &bh);
+    cvLap->getTextBounds(sLeft, 0, 0, &bx, &by, &bw, &bh);
 
-    // size parameters for the drawn infinity symbol
-    const int r = 6;                 // circle radius
-    const int overlap = r / 2;       // overlap between the two circles
-    const int symbolW = (r*2) + (r*2 - overlap); // approximate symbol width
-    const int spacing = 6;           // space between text and symbol
+    const int r = 6;
+    const int overlap = r / 2;
+    const int symbolW = (r*2) + (r*2 - overlap);
+    const int spacing = 6;
 
     int totalW = bw + spacing + symbolW;
-    int tx = LX + (BW - totalW)/2 - bx;
-    int ty = Y1 + (BH - bh)/2 - by;
+    int tx = (cvLap->width() - totalW)/2 - bx;
+    int ty = (cvLap->height() - bh)/2 - by;
 
-    tft.setTextColor(C_TX);
-    tft.setCursor(tx, ty); tft.print(sLeft);
+    cvLap->setTextColor(C_TX);
+    cvLap->setCursor(tx, ty); cvLap->print(sLeft);
 
     int symbolStart = tx + bw + spacing;
     int cx1 = symbolStart + r;
     int cx2 = symbolStart + r + (r - overlap);
-    int ycenter = Y1 + (BH / 2);
+    int ycenter = cvLap->height() / 2;
 
-    // draw two overlapping circles as the infinity glyph
-    tft.drawCircle(cx1, ycenter, r, C_TX);
-    tft.drawCircle(cx2, ycenter, r, C_TX);
-    // optionally draw a small center connector to improve the likeness
-    tft.fillCircle(cx1 + (r - overlap/2), ycenter, 2, C_TX);
+    cvLap->drawCircle(cx1, ycenter, r, C_TX);
+    cvLap->drawCircle(cx2, ycenter, r, C_TX);
+    cvLap->fillCircle(cx1 + (r - overlap/2), ycenter, 2, C_TX);
+
+    cvLap->setFont(); cvLap->setTextSize(1);
   }
 
-  // restore classic font state
-  tft.setFont(); tft.setTextSize(1);
+  blit(LX+2, Y1+2, *cvLap);
 
-  // update change-tracking
   ccurLap = curLap;
   cTotLaps = totLaps;
 }
 
-// ================== LEDs ==================
+// ================== LEDs (ORIGINAL behavior restored) ==================
 void drawRevLEDs(){
   unsigned long now = millis();
   if (now - lastDataTime > 2000) return;
 
-  static bool flashState = false; static unsigned long lastFlash = 0; const unsigned long flashPeriod = 250;
+  static bool flashState = false; 
+  static unsigned long lastFlash = 0; 
+  const unsigned long flashPeriod = 250;
   static uint8_t lastMask = 0;
+
   uint8_t mask = (flagRed?8:0) | (flagYellow?4:0) | (flagBlue?2:0) | (flagGreen?1:0);
   if (mask != lastMask) { lastMask = mask; flashState=false; lastFlash=0; }
 
@@ -553,7 +516,6 @@ void readCSV(){
     lastDataTime = millis();
     char ch = (char)Serial.read();
     if ((uint8_t)ch == 10) { // LF
-      // allow more trailing fields (tyre temps etc.)
       long v[25] = {0}; int i = 0; String tok = "";
       for (uint16_t k = 0; k < line.length() && i < 25; k++) {
         char c = line[k];
@@ -565,21 +527,11 @@ void readCSV(){
       }
       tok.trim(); if (i < 25) v[i++] = tok.indexOf('.') >= 0 ? (long)tok.toFloat() : (long)tok.toInt();
 
-      // We expect at least the original 13 fields. Additional trailing fields are optional:
-      // [0] rpm, [1] speed, [2] gear, [3] pos, [4] fuel (ignored), [5] lapMs, [6] bestMs, [7] deltaMs,
-      // [8] maxRpm, [9] flagYellow, [10] flagBlue, [11] flagRed, [12] flagGreen,
-      // optional [13] CurrentLap, [14] TotalLaps
-      // optional tyre temps (order assumed):
-      // [15] TyreTemperatureFrontLeft
-      // [16] TyreTemperatureFrontRight
-      // [17] TyreTemperatureRearLeft
-      // [18] TyreTemperatureRearRight
       if (i >= 13) {
         rpm     = (int)v[0];
         speed   = (int)v[1];
         gear    = (int)v[2];
         pos     = (int)v[3];
-        // v[4] exists but fuel handling removed; we simply ignore v[4]
         lapMs   = v[5];
         bestMs  = v[6];
         deltaMs = v[7];
@@ -589,13 +541,9 @@ void readCSV(){
         flagRed    = (int)v[11];
         flagGreen  = (int)v[12];
 
-        if (i >= 14) curLap = (int)v[13];
-        else curLap = 0;
+        curLap  = (i >= 14) ? (int)v[13] : 0;
+        totLaps = (i >= 15) ? (int)v[14] : 0;
 
-        if (i >= 15) totLaps = (int)v[14];
-        else totLaps = 0;
-
-        // tyre temps (if provided)
         if (i >= 16) tyreFL = (int)v[15];
         if (i >= 17) tyreFR = (int)v[16];
         if (i >= 18) tyreRL = (int)v[17];
@@ -604,7 +552,7 @@ void readCSV(){
       line = "";
     } else {
       line += ch;
-      if (line.length() > 1024) line = ""; // crude guard (allow larger lines)
+      if (line.length() > 1024) line = ""; // crude guard
     }
   }
 }
@@ -622,11 +570,21 @@ void setup(){
   clearAllLeds();
 
   tft.begin();
+  // tft.setSPISpeed(40000000); // optional; comment if your lib lacks it
   tft.setRotation(1);
   tft.setTextWrap(false);
   tft.setTextSize(1);
-  drawStatic();
 
+  // Allocate canvases to exact inner sizes
+  cvLap      = new GFXcanvas16(BW-4,               BH-4);
+  cvSpeedRpm = new GFXcanvas16(BW-4,               BH_speedFuel()-4);
+  cvPos      = new GFXcanvas16(BW-4,               BH-4);
+  cvTyres    = new GFXcanvas16(BW-4,               BH_speedFuel()-4);
+  cvGear     = new GFXcanvas16(GW-4,               GH-4);
+  cvLapBest  = new GFXcanvas16(BBW-8,              BOT_H-6);
+  cvDelta    = new GFXcanvas16(BBW-8,              BOT_H-6);
+
+  drawStatic();
   lastDataTime = millis();
 }
 
@@ -647,12 +605,15 @@ void loop(){
     cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
   }
 
-  drawLapCounter();   // top-left box now shows lap counter (cur/total) or cur/∞
-  drawSpeedRpmStack();
-  drawPosBig();
-  drawGear();       // fixed font with margin
-  drawLapBest();
-  drawDelta();
-  drawTyreTemps();  // new: split right-bottom into 4 tyre temp rectangles (label now on top)
+  // Draw widgets (only blit on change; canvases avoid flicker)
+  drawLapCounter();   // top-left
+  drawPosBig();       // right-top
+  drawLapBest();      // bottom-left
+  drawDelta();        // bottom-right
+  drawGear();         // center
+  drawSpeedRpmStack();// left-bottom
+  drawTyreTemps();    // right-bottom
+
+  // LEDs last (original behavior)
   drawRevLEDs();
 }

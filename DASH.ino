@@ -3,13 +3,23 @@ ESP32 SimHub Dash for ILI9341 (320x240) + 8x WS2812 LEDs
 Updates:
 - Top-left box shows lap counter as "cur/total" using fixed fonts (no label).
 - If TotalLaps is 0 or not provided, a graphical infinity symbol is drawn to the right of the slash.
-- Uses dedicated fixed-font constants for the lap number so it's easy to tweak.
+- Uses dedicated fixed-font constants for the lap number so it’s easy to tweak.
 - GEAR uses a fixed font size (no autosizing), with a margin.
 - Margin is applied around the gear text so it never kisses the frame.
 - Removed all autosizing/font-scaling logic; fonts are fixed per area.
 - CSV parsing extended to optionally accept two additional trailing fields:
     field 14 (index 13) = CurrentLap (GameDataCurrentLap)
     field 15 (index 14) = TotalLaps  (GameData.TotalLaps)
+- Removed fuel-related UI and logic; the right-bottom box is now split into 4 equal rectangles
+  showing tyre temperatures:
+    top-left = Front Left, top-right = Front Right,
+    bottom-left = Rear Left, bottom-right = Rear Right
+  NOTE: The code expects tyre temps (if present) as additional trailing CSV fields in this order:
+    index 15 -> TyreTemperatureFrontLeft
+    index 16 -> TyreTemperatureFrontRight
+    index 17 -> TyreTemperatureRearLeft
+    index 18 -> TyreTemperatureRearRight
+  If your SimHub CSV orders these differently, adjust the indices in readCSV() accordingly.
 */
 
 #include <SPI.h>
@@ -29,6 +39,7 @@ Updates:
 #include <Fonts/FreeSansBold24pt7b.h>
 #include <Fonts/FreeSansBold18pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSans8pt7b.h>
 
 #include <limits.h>
 
@@ -62,20 +73,29 @@ const uint16_t C_OK  = ILI9341_GREEN;
 const uint16_t C_BAD = ILI9341_RED;
 
 // ================== STATE ==================
-int rpm=0, maxRpm=8000, speed=0, gear=0, pos=0, fuel=0;
+int rpm=0, maxRpm=8000, speed=0, gear=0, pos=0;
 long lapMs=0, bestMs=0, deltaMs=0;
 int flagYellow=0, flagBlue=0, flagRed=0, flagGreen=0;
+
+// Tyre temperatures (new)
+int tyreFL = 0; // front-left (top-left)
+int tyreFR = 0; // front-right (top-right)
+int tyreRL = 0; // rear-left (bottom-left)
+int tyreRR = 0; // rear-right (bottom-right)
 
 // New lap counters (from SimHub)
 int curLap = 0;
 int totLaps = 0;
 
 // ================== CHANGE-TRACKING ==================
-int crpm=-1, cspeed=-1, cgear=-999, cpos=-1, cfuel=-1;
+int crpm=-1, cspeed=-1, cgear=-999, cpos=-1;
 long clap=-1, cbest=-1, cdelta=LONG_MIN/2;
 
 // change tracking for laps
 int ccurLap = -1, cTotLaps = -1;
+
+// change tracking for tyres
+int cTyreFL = INT_MIN, cTyreFR = INT_MIN, cTyreRL = INT_MIN, cTyreRR = INT_MIN;
 
 // ================== DATA FRESHNESS ==================
 unsigned long lastDataTime = 0;
@@ -113,9 +133,12 @@ static const GFXfont* FONT_GEAR  = &FreeSansBold66pt7b;
 static const GFXfont* FONT_SPEED = &FreeSansBold24pt7b;
 static const GFXfont* FONT_RPM   = &FreeSansBold12pt7b;
 static const GFXfont* FONT_POS   = &FreeSansBold24pt7b;
-static const GFXfont* FONT_FUEL  = &FreeSansBold18pt7b;
 static const GFXfont* FONT_LAPBEST = &FreeSansBold12pt7b;
 static const GFXfont* FONT_DELTA = &FreeSansBold18pt7b;
+
+// Tyre fonts
+static const GFXfont* FONT_TYRE_VALUE = &FreeSansBold12pt7b;
+static const GFXfont* FONT_TYRE_LABEL = &FreeSans8pt7b;
 
 // Dedicated lap counter fonts (easy to tweak independently)
 static const GFXfont* FONT_LAP_NUMBER = &FreeSansBold18pt7b; // larger current/total
@@ -133,13 +156,15 @@ void frame(int x,int y,int w,int h){ tft.drawRect(x,y,w,h,C_BOX); }
 
 // Center a single-string using a fixed font
 static void drawCenteredText_fixedFont(int x,int y,int w,int h,const GFXfont* font,const String& s,uint16_t col){
-  tft.fillRect(x+2,y+2,w-4,h-4,C_BG);
+  // fixed the parameter name typo (was 'intw' which caused compile error)
+  int xx = x, yy = y, ww = w;
+  tft.fillRect(xx+2,yy+2,ww-4,h-4,C_BG);
   tft.setFont(font);
   tft.setTextSize(1);
   int16_t bx,by; uint16_t bw,bh;
   tft.getTextBounds(s, 0, 0, &bx, &by, &bw, &bh);
-  int cx = x + (w - bw)/2 - bx;
-  int cy = y + (h - bh)/2 - by;
+  int cx = xx + (ww - bw)/2 - bx;
+  int cy = yy + (h - bh)/2 - by;
   tft.setTextColor(col);
   tft.setCursor(cx, cy);
   tft.print(s);
@@ -188,9 +213,7 @@ void drawStatic(){
 
   // Right column
   frame(RXc, Y1, BW, BH);              // position box
-  frame(RXc, Y2, BW, BH_speedFuel());  // fuel box
-  tft.setFont(); tft.setTextSize(2); tft.setTextColor(C_TX);
-  tft.setCursor(RXc+6, Y2+6); tft.print("fuel");
+  frame(RXc, Y2, BW, BH_speedFuel());  // tyre temps box (split into 4)
 
   // Center gear box
   frame(GX,  GY, GW, GH);
@@ -240,20 +263,42 @@ void drawSpeedRpmStack(){
   cspeed = speed; crpm = rpm;
 }
 
-void drawFuel(){
-  if(fuel==cfuel) return;
-  tft.fillRect(RXc+2, Y2+2, BW-4, BH_speedFuel()-4, C_BG);
+// ================== TYRE TEMPS (split right-bottom box into 4) ==================
+void drawTyreTemps() {
+  if (tyreFL == cTyreFL && tyreFR == cTyreFR && tyreRL == cTyreRL && tyreRR == cTyreRR) return;
 
-  String s = String(fuel) + "%";
-  tft.setFont(FONT_FUEL); tft.setTextSize(1);
-  int16_t bx, by; uint16_t bw, bh;
-  tft.getTextBounds(s, 0, 0, &bx, &by, &bw, &bh);
-  int cx = RXc + (BW - bw)/2 - bx;
-  int cy = Y2  + (BH_speedFuel() - bh)/2 - by;
-  tft.setTextColor(C_TX);
-  tft.setCursor(cx, cy); tft.print(s);
-  tft.setFont(); // classic
-  cfuel=fuel;
+  // compute sub-rectangles inside the right-bottom box
+  int boxX = RXc + 2;
+  int boxY = Y2 + 2;
+  int boxW = BW - 4;
+  int boxH = BH_speedFuel() - 4;
+
+  // split into 2 x 2 grid
+  int halfW = boxW / 2;
+  int halfH = boxH / 2;
+
+  // top-left = Front Left (FL)
+  int x_tl = boxX;
+  int y_tl = boxY;
+  drawTwoLineCentered_fixedFonts(x_tl, y_tl, halfW, halfH, FONT_TYRE_VALUE, String(tyreFL), FONT_TYRE_LABEL, String("FL"), C_TX);
+
+  // top-right = Front Right (FR)
+  int x_tr = boxX + halfW;
+  int y_tr = boxY;
+  drawTwoLineCentered_fixedFonts(x_tr, y_tr, boxW - halfW, halfH, FONT_TYRE_VALUE, String(tyreFR), FONT_TYRE_LABEL, String("FR"), C_TX);
+
+  // bottom-left = Rear Left (RL)
+  int x_bl = boxX;
+  int y_bl = boxY + halfH;
+  drawTwoLineCentered_fixedFonts(x_bl, y_bl, halfW, boxH - halfH, FONT_TYRE_VALUE, String(tyreRL), FONT_TYRE_LABEL, String("RL"), C_TX);
+
+  // bottom-right = Rear Right (RR)
+  int x_br = boxX + halfW;
+  int y_br = boxY + halfH;
+  drawTwoLineCentered_fixedFonts(x_br, y_br, boxW - halfW, boxH - halfH, FONT_TYRE_VALUE, String(tyreRR), FONT_TYRE_LABEL, String("RR"), C_TX);
+
+  // update change-tracking
+  cTyreFL = tyreFL; cTyreFR = tyreFR; cTyreRL = tyreRL; cTyreRR = tyreRR;
 }
 
 // ========== GEAR FIXED FONT WITH MARGIN ==========
@@ -483,8 +528,9 @@ void readCSV(){
     lastDataTime = millis();
     char ch = (char)Serial.read();
     if ((uint8_t)ch == 10) { // LF
-      long v[15] = {0}; int i = 0; String tok = "";
-      for (uint16_t k = 0; k < line.length() && i < 15; k++) {
+      // allow more trailing fields (tyre temps etc.)
+      long v[25] = {0}; int i = 0; String tok = "";
+      for (uint16_t k = 0; k < line.length() && i < 25; k++) {
         char c = line[k];
         if (c == ',') {
           tok.trim();
@@ -492,18 +538,23 @@ void readCSV(){
           tok = "";
         } else if ((uint8_t)c != 13) { tok += c; }
       }
-      tok.trim(); if (i < 15) v[i++] = tok.indexOf('.') >= 0 ? (long)tok.toFloat() : (long)tok.toInt();
+      tok.trim(); if (i < 25) v[i++] = tok.indexOf('.') >= 0 ? (long)tok.toFloat() : (long)tok.toInt();
 
       // We expect at least the original 13 fields. Additional trailing fields are optional:
-      // [0] rpm, [1] speed, [2] gear, [3] pos, [4] fuel, [5] lapMs, [6] bestMs, [7] deltaMs,
+      // [0] rpm, [1] speed, [2] gear, [3] pos, [4] fuel (ignored), [5] lapMs, [6] bestMs, [7] deltaMs,
       // [8] maxRpm, [9] flagYellow, [10] flagBlue, [11] flagRed, [12] flagGreen,
       // optional [13] CurrentLap, [14] TotalLaps
+      // optional tyre temps (order assumed):
+      // [15] TyreTemperatureFrontLeft
+      // [16] TyreTemperatureFrontRight
+      // [17] TyreTemperatureRearLeft
+      // [18] TyreTemperatureRearRight
       if (i >= 13) {
         rpm     = (int)v[0];
         speed   = (int)v[1];
         gear    = (int)v[2];
         pos     = (int)v[3];
-        fuel    = (int)v[4];
+        // v[4] exists but fuel handling removed; we simply ignore v[4]
         lapMs   = v[5];
         bestMs  = v[6];
         deltaMs = v[7];
@@ -518,11 +569,17 @@ void readCSV(){
 
         if (i >= 15) totLaps = (int)v[14];
         else totLaps = 0;
+
+        // tyre temps (if provided)
+        if (i >= 16) tyreFL = (int)v[15];
+        if (i >= 17) tyreFR = (int)v[16];
+        if (i >= 18) tyreRL = (int)v[17];
+        if (i >= 19) tyreRR = (int)v[18];
       }
       line = "";
     } else {
       line += ch;
-      if (line.length() > 256) line = ""; // crude guard
+      if (line.length() > 1024) line = ""; // crude guard (allow larger lines)
     }
   }
 }
@@ -560,16 +617,17 @@ void loop(){
 
   if (noDataScreenActive) {
     drawStatic(); clearAllLeds(); noDataScreenActive = false;
-    crpm=-1; cspeed=-1; cgear=-999; cpos=-1; cfuel=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
+    crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
     ccurLap = -1; cTotLaps = -1;
+    cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
   }
 
   drawLapCounter();   // top-left box now shows lap counter (cur/total) or cur/∞
   drawSpeedRpmStack();
   drawPosBig();
-  drawFuel();
   drawGear();       // fixed font with margin
   drawLapBest();
   drawDelta();
+  drawTyreTemps();  // new: split right-bottom into 4 tyre temp rectangles
   drawRevLEDs();
 }

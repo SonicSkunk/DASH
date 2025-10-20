@@ -559,7 +559,7 @@ void drawRevLEDs(){
   if (rpm < 0 || maxRpm <= 0) { clearAllLeds(); return; }
 
   const float startPct = 0.75f; // first LED wakes up here
-  const float endPct   = 0.90f; // full bar by here, shift or pray
+  const float endPct   = 1.00f; // full bar by here, shift or pray
 
   float norm = (float)rpm / (float)maxRpm;
   float pct  = (norm - startPct) / (endPct - startPct);

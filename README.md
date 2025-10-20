@@ -52,13 +52,11 @@ Once finalized, **STL and project files will be published** in this repo.
 ---
 
 ## To do
-- Display Pit limiter
-- vertical spacing
+- fix infinity symbol glitch
 
 ## Known Issues (WIP)
 - Reverse gear not showing
 - infinity symbol on lap counter not showing correctly
-- weird led refresh behavior
 ---
 
 ## License

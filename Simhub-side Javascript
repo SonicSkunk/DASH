@@ -19,10 +19,9 @@
 // 16 TYRE_FR (TyreTemperatureFrontRight)
 // 17 TYRE_RL (TyreTemperatureRearLeft)
 // 18 TYRE_RR (TyreTemperatureRearRight)
+// 19 PIT_LIMITER_ON  (GameData.PitLimiterOn -> 0/1)
 //
 // NOTE: dash expects tyre temps in the order FL, FR, RL, RR at indices 15..18 (0-based).
-// If your SimHub profile uses different property names, I included fallbacks: short-name (GameData.*)
-// and DataCorePlugin prefix. Adjust if needed.
 
 function safe(v){ return (v===null||v===undefined||v===""||v==="NaN"||isNaN(v)) ? 0 : v; }
 function int(v){ v = safe(v); return Math.round(parseFloat(v)) || 0; }
@@ -33,7 +32,7 @@ function parseTimeMs(v){
   if (s.indexOf(":") < 0) {
     let sec = parseFloat(s);
     let ms = isNaN(sec) ? 0 : Math.round(sec * 1000);
-    return (ms < 5000) ? 0 : ms;  // keep your cutoff
+    return (ms < 5000) ? 0 : ms;
   }
   let p = s.split(":"); let h=0,m=0,sec=0;
   if (p.length===2){ m=parseFloat(p[0]); sec=parseFloat(p[1]); }
@@ -46,14 +45,12 @@ function parseTimeMs(v){
 // Try all known live/position-matched deltas. If value looks like seconds, convert to ms.
 function pickDeltaMs(){
   const candidates = [
-    // Position-matched deltas (most accurate)
     'PersistantTrackerPlugin.DeltaToSessionBestLap_Difference',
     'PersistantTrackerPlugin.DeltaToSessionBestLap.Difference',
     'PersistantTrackerPlugin.DeltaLive_Difference',
     'PersistantTrackerPlugin.DeltaLive.Difference',
     'PersistantTrackerPlugin.DeltaToReferenceLap_Difference',
     'PersistantTrackerPlugin.DeltaToReferenceLap.Difference',
-    // Game-core variants seen in some titles/profiles
     'DataCorePlugin.GameData.DeltaToBestLap',
     'DataCorePlugin.GameData.DeltaBest',
     'DataCorePlugin.GameData.TimeDeltaBest',
@@ -64,15 +61,11 @@ function pickDeltaMs(){
     if (raw === null || raw === undefined || raw === "" || raw === "NaN") continue;
     let val = parseFloat(raw);
     if (isNaN(val)) continue;
-    // Heuristic: if magnitude < 600 it’s seconds, else already ms
     let ms = Math.abs(val) < 600 ? Math.round(val * 1000) : Math.round(val);
     if (ms !== 0) return ms;
   }
-
-  // Last resort: predictive estimate (your original source)
   let pred = parseFloat($prop('PersistantTrackerPlugin.EstimatedLapTime_SessionBestBasedSimhub_EstimatedDelta'));
   if (!isNaN(pred)) return Math.round(pred * 1000);
-
   return 0;
 }
 
@@ -107,7 +100,6 @@ let totLaps = int($prop('DataCorePlugin.GameData.TotalLaps')) ||
               int($prop('GameData.TotalLaps')) || 0;
 
 // --- Tyre temperatures (robust property lookup) ---
-// Prefer DataCorePlugin.GameData.* but fall back to GameData.* names.
 let tyreFL = int($prop('DataCorePlugin.GameData.TyreTemperatureFrontLeft')) ||
              int($prop('GameData.TyreTemperatureFrontLeft')) || 0;
 
@@ -120,11 +112,16 @@ let tyreRL = int($prop('DataCorePlugin.GameData.TyreTemperatureRearLeft')) ||
 let tyreRR = int($prop('DataCorePlugin.GameData.TyreTemperatureRearRight')) ||
              int($prop('GameData.TyreTemperatureRearRight')) || 0;
 
-// Return CSV line: existing fields + curLap + totLaps + tyre temps (FL,FR,RL,RR)
+// --- Pit limiter ---
+let pitLimiterOn = int($prop('DataCorePlugin.GameData.PitLimiterOn')) ||
+                   int($prop('GameData.PitLimiterOn')) || 0;
+
+// Return CSV line (append pit limiter at the end to match ESP32 index 19)
 return [
   rpm, speed, gear, pos, fuel,
   lapMs, bestMs, deltaMs, maxRpm,
   flagYellow, flagBlue, flagRed, flagGreen,
   curLap, totLaps,
-  tyreFL, tyreFR, tyreRL, tyreRR
+  tyreFL, tyreFR, tyreRL, tyreRR,
+  pitLimiterOn
 ].join(',') + "\n";

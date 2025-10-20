@@ -1,9 +1,8 @@
 /*
 ESP32 SimHub Dash for ILI9341 (320x240) + 8x WS2812 LEDs
-Flickerless display + ORIGINAL LED REV BAR behavior
-- Offscreen per-box canvases (GFXcanvas16) then blit with drawRGBBitmap()
-- No startWrite/endWrite wrapping
-- LED bar logic reverted to your original easing + unconditional Show()
+Renders RPM, speed, lap counter, gear, position, tyre temperatures, lap/best, and delta on an ILI9341. 
+Drives an 8-LED shift bar via ESP32 RMT. 
+Falls back to NO DATA FEED when input stops.
 */
 
 #include <SPI.h>
@@ -16,7 +15,7 @@ Flickerless display + ORIGINAL LED REV BAR behavior
   #include <esp_bt.h>
 #endif
 
-// Fonts
+// Included fonts.
 #include <Fonts/FreeSansBold66pt7b.h>
 #include <Fonts/FreeSansBold48pt7b.h>
 #include <Fonts/FreeSansBold36pt7b.h>
@@ -29,11 +28,12 @@ Flickerless display + ORIGINAL LED REV BAR behavior
 #include <limits.h>
 
 // ================== HARDWARE PINS ==================
+// ILI9341 SPI pins. Match your wiring.
 #define TFT_CS   27
 #define TFT_DC   16
 #define TFT_RST   4
 
-// WS2812 strip (8 LEDs by default)
+// WS2812 led strip.
 #define LED_PIN   13
 #define LED_COUNT 8
 
@@ -41,6 +41,7 @@ Adafruit_ILI9341 tft(TFT_CS, TFT_DC, TFT_RST);
 NeoPixelBus<NeoGrbFeature, NeoEsp32Rmt0800KbpsMethod> strip(LED_COUNT, LED_PIN);
 
 // ================== LED BRIGHTNESS ==================
+// Global LED brightness scaler. 0.07 keeps it visible without flashbanging yourself mid-corner.
 const float LED_BRIGHTNESS = 0.07f;
 static inline RgbColor dimColor(RgbColor c) {
   return RgbColor(
@@ -51,6 +52,7 @@ static inline RgbColor dimColor(RgbColor c) {
 }
 
 // ================== COLORS ==================
+// House palette.
 const uint16_t C_BG  = ILI9341_BLACK;
 const uint16_t C_TX  = ILI9341_WHITE;
 const uint16_t C_BOX = ILI9341_YELLOW;
@@ -58,32 +60,36 @@ const uint16_t C_OK  = ILI9341_GREEN;
 const uint16_t C_BAD = ILI9341_RED;
 
 // ================== STATE ==================
+// Telemetry stash. Fed by CSV. If you see nonsense, your input is nonsense.
 int rpm=0, maxRpm=8000, speed=0, gear=0, pos=0;
 long lapMs=0, bestMs=0, deltaMs=0;
 int flagYellow=0, flagBlue=0, flagRed=0, flagGreen=0;
 
-// Tyre temperatures
+// Tyre temps.
 int tyreFL = 0, tyreFR = 0, tyreRL = 0, tyreRR = 0;
 
-// Lap counters
+// Lap counters.
 int curLap = 0;
 int totLaps = 0;
 
 // ================== CHANGE-TRACKING ==================
+// Cached values so we only redraw when something actually changes.
 int crpm=-1, cspeed=-1, cgear=-999, cpos=-1;
 long clap=-1, cbest=-1, cdelta=LONG_MIN/2;
 int ccurLap = -1, cTotLaps = -1;
 int cTyreFL = INT_MIN, cTyreFR = INT_MIN, cTyreRL = INT_MIN, cTyreRR = INT_MIN;
 
 // ================== DATA FRESHNESS ==================
+// If the feed goes quiet, we show a 'NO DATA FEED' screen and blink LEDs.
 unsigned long lastDataTime = 0;
 bool noDataScreenActive = false;
 
 // ================== LAYOUT ==================
-const int M  = 6;
-const int G  = 8;
-const int BW = 92;
-const int BH = 56;
+// Pixel math. Touch this if you enjoy UI Tetris.
+const int M  = 6;     // margin
+const int G  = 8;     // gap
+const int BW = 92;    // side box width
+const int BH = 56;    // top box height
 
 const int Y1 = M + 6;
 const int Y2 = Y1 + BH + G;
@@ -103,9 +109,10 @@ const int BBW = (320 - (3*M))/2;
 const int BLX = M;
 const int BRX = BLX + BBW + M;
 
+// Speed/RPM area uses whatever is left between Y2 and bottom row.
 static inline int BH_speedFuel() { return (GY + GH) - Y2; }
 
-// ================== FIXED FONTS ==================
+// ================== USED FONTS ==================
 static const GFXfont* FONT_GEAR       = &FreeSansBold66pt7b;
 static const GFXfont* FONT_SPEED      = &FreeSansBold24pt7b;
 static const GFXfont* FONT_RPM        = &FreeSans10pt7b;
@@ -117,6 +124,7 @@ static const GFXfont* FONT_TYRE_LABEL = &FreeSans8pt7b;
 static const GFXfont* FONT_LAP_NUMBER = &FreeSansBold18pt7b;
 
 // ================== HELPERS ==================
+// Converts milliseconds to mm:ss.mmm
 static inline String msToStr(long ms) {
   bool neg = ms < 0; if (neg) ms = -ms;
   long t = ms/1000, mm = t/60, ss = t%60, sss = ms%1000;
@@ -124,9 +132,10 @@ static inline String msToStr(long ms) {
   snprintf(b, sizeof(b), "%s%ld:%02ld.%03ld", neg?"-":"", mm, ss, sss);
   return String(b);
 }
+// Draws a neat box outline.
 void frame(int x,int y,int w,int h){ tft.drawRect(x,y,w,h,C_BOX); }
 
-// Canvas-only helpers
+// Canvas-only helpers. They measure text and center it.
 static void centeredText_onCanvas(GFXcanvas16& cv,int x,int y,int w,int h,const GFXfont* font,const String& s,uint16_t col, uint16_t bg){
   cv.fillRect(x+2,y+2,w-4,h-4,bg);
   cv.setTextWrap(false);
@@ -173,19 +182,21 @@ static void twoLine_onCanvas(GFXcanvas16& cv,int x,int y,int w,int h,const GFXfo
 }
 
 // ================== OFFSCREEN CANVASES ==================
-GFXcanvas16 *cvLap      = nullptr; // top-left inner (BW-4 x BH-4)
-GFXcanvas16 *cvSpeedRpm = nullptr; // left-bottom inner (BW-4 x BH_speedFuel()-4)
-GFXcanvas16 *cvPos      = nullptr; // right-top inner (BW-4 x BH-4)
-GFXcanvas16 *cvTyres    = nullptr; // right-bottom inner (BW-4 x BH_speedFuel()-4)
-GFXcanvas16 *cvGear     = nullptr; // center inner (GW-4 x GH-4)
-GFXcanvas16 *cvLapBest  = nullptr; // bottom-left inner (BBW-8 x BOT_H-6)
-GFXcanvas16 *cvDelta    = nullptr; // bottom-right inner
+// Each widget gets its own canvas. We draw there, then blit once.
+GFXcanvas16 *cvLap      = nullptr; // Lap counter
+GFXcanvas16 *cvSpeedRpm = nullptr; // Speed + RPM
+GFXcanvas16 *cvPos      = nullptr; // Position
+GFXcanvas16 *cvTyres    = nullptr; // Tyre temps
+GFXcanvas16 *cvGear     = nullptr; // Gear
+GFXcanvas16 *cvLapBest  = nullptr; // Last/Best times
+GFXcanvas16 *cvDelta    = nullptr; // Delta
 
 inline void blit(int x,int y,GFXcanvas16& c){
   tft.drawRGBBitmap(x, y, c.getBuffer(), c.width(), c.height());
 }
 
 // ================== STATIC BACKGROUND ==================
+// Draw once. If you’re redrawing this every frame, expect a flicker fest.
 void drawStatic(){
   tft.fillScreen(C_BG);
 
@@ -206,6 +217,7 @@ void drawStatic(){
 }
 
 // ================== NO DATA ==================
+// 'NO DATA FEED' screen when no data input.
 void drawNoDataScreen() {
   tft.fillScreen(C_BG);
   tft.setFont(); tft.setTextSize(3); tft.setTextColor(C_BAD);
@@ -238,6 +250,7 @@ void clearAllLeds() {
 }
 
 // ================== DYNAMIC DRAW (to canvases) ==================
+// Speed + RPM stacked.
 void drawSpeedRpmStack(){
   static unsigned long lastDraw = 0;
   if (speed == cspeed && rpm == crpm) return;
@@ -252,6 +265,7 @@ void drawSpeedRpmStack(){
   cspeed = speed; crpm = rpm; lastDraw = now;
 }
 
+// Tyres. Four boxes, two lines each.
 void drawTyreTemps() {
   static unsigned long lastDraw = 0;
   if (tyreFL == cTyreFL && tyreFR == cTyreFR && tyreRL == cTyreRL && tyreRR == cTyreRR) return;
@@ -276,6 +290,7 @@ void drawTyreTemps() {
   lastDraw = now;
 }
 
+// Gear in the big center box.
 void drawGear(){
   static unsigned long lastDraw = 0;
   if (gear == cgear) return;
@@ -305,6 +320,7 @@ void drawGear(){
   cgear = gear; lastDraw = now;
 }
 
+// Big fat “P#”. If you’re not P1, drive faster.
 void drawPosBig(){
   if(pos==cpos) return;
 
@@ -317,6 +333,7 @@ void drawPosBig(){
   cpos=pos;
 }
 
+// Last and Best lap times.
 void drawLapBest() {
   bool hasLast = lapMs > 0;
   bool hasBest = bestMs > 0;
@@ -366,6 +383,7 @@ void drawLapBest() {
   clap = lapMs; cbest = bestMs;
 }
 
+// Delta with sign, centered and color-coded. Green good, red bad, shocker.
 static const int DELTA_BASELINE_FIX = 0;
 void drawDelta() {
   if (deltaMs == cdelta) return;
@@ -400,6 +418,7 @@ void drawDelta() {
 }
 
 // ================== LAP COUNTER ==================
+// Shows "cur/total". If total is 0, draws a infinity symbol.
 void drawLapCounter() {
   if (curLap == ccurLap && totLaps == cTotLaps) return;
 
@@ -419,7 +438,7 @@ void drawLapCounter() {
     cvLap->setFont(); cvLap->setTextSize(1);
 
   } else {
-    // "cur/∞" with drawn infinity
+    // "cur/∞" with a DIY infinity.
     String sLeft = String(curLap) + "/";
     cvLap->setFont(FONT_LAP_NUMBER);
     cvLap->setTextSize(1);
@@ -456,7 +475,9 @@ void drawLapCounter() {
   cTotLaps = totLaps;
 }
 
-// ================== LEDs (ORIGINAL behavior restored) ==================
+// ================== LEDs ==================
+// Flags override everything and blink. Otherwise, ease into a staged rev bar.
+// Adjust startPct/endPct if you enjoy shifting at 3k like it’s 1998.
 void drawRevLEDs(){
   unsigned long now = millis();
   if (now - lastDataTime > 2000) return;
@@ -482,8 +503,8 @@ void drawRevLEDs(){
 
   if (rpm < 0 || maxRpm <= 0) { clearAllLeds(); return; }
 
-  const float startPct = 0.75f;
-  const float endPct   = 0.90f;
+  const float startPct = 0.75f; // first LED wakes up here
+  const float endPct   = 0.90f; // full bar by here, shift or pray
 
   float norm = (float)rpm / (float)maxRpm;
   float pct  = (norm - startPct) / (endPct - startPct);
@@ -510,12 +531,16 @@ void drawRevLEDs(){
 }
 
 // ================== CSV ==================
+// Expects up to 19 fields (we read up to 25 just in case):
+// 0 rpm, 1 speed, 2 gear, 3 pos, 5 lapMs, 6 bestMs, 7 deltaMs, 8 maxRpm,
+// 9-12 flags(Y,B,R,G), 13 curLap, 14 totLaps, 15-18 tyre FL/FR/RL/RR.
+// If your feed is different, fix your sender. Or map here.
 void readCSV(){
   static String line;
   while (Serial.available()) {
     lastDataTime = millis();
     char ch = (char)Serial.read();
-    if ((uint8_t)ch == 10) { // LF
+    if ((uint8_t)ch == 10) { // LF terminator
       long v[25] = {0}; int i = 0; String tok = "";
       for (uint16_t k = 0; k < line.length() && i < 25; k++) {
         char c = line[k];
@@ -552,12 +577,13 @@ void readCSV(){
       line = "";
     } else {
       line += ch;
-      if (line.length() > 1024) line = ""; // crude guard
+      if (line.length() > 1024) line = ""; // if your app spams garbage, we bail
     }
   }
 }
 
 // ================== BOOT ==================
+// Kills WiFi/BT, starts LEDs/TFT, allocates canvases, draws static chrome. Done.
 void setup(){
   Serial.begin(115200);
 
@@ -570,12 +596,12 @@ void setup(){
   clearAllLeds();
 
   tft.begin();
-  // tft.setSPISpeed(40000000); // optional; comment if your lib lacks it
+  // tft.setSPISpeed(40000000); // Use if your ILI9341 lib supports it and your wiring isn’t a meme.
   tft.setRotation(1);
   tft.setTextWrap(false);
   tft.setTextSize(1);
 
-  // Allocate canvases to exact inner sizes
+  // Allocate canvases to exactly the inner sizes of the frames. No wasted pixels.
   cvLap      = new GFXcanvas16(BW-4,               BH-4);
   cvSpeedRpm = new GFXcanvas16(BW-4,               BH_speedFuel()-4);
   cvPos      = new GFXcanvas16(BW-4,               BH-4);
@@ -589,6 +615,7 @@ void setup(){
 }
 
 // ================== MAIN LOOP ==================
+// Read feed, handle no-data mode, then redraw only what changed. LEDs last.
 void loop(){
   readCSV();
 
@@ -614,6 +641,6 @@ void loop(){
   drawSpeedRpmStack();// left-bottom
   drawTyreTemps();    // right-bottom
 
-  // LEDs last (original behavior)
+  // LEDs last.
   drawRevLEDs();
 }

@@ -253,25 +253,173 @@ void drawNoDataScreen() {
   tft.setCursor(x, y); tft.print(msg);
 }
 
-void setNoDataLeds() {
-  static unsigned long lastBlink=0;
-  static bool on=false, lastOn=false;
-  unsigned long now=millis();
-  if (now - lastBlink >= 1000) { lastBlink = now; on = !on; }
-  if (on != lastOn) {
-    for (int i = 0; i < LED_COUNT; i++) {
-      RgbColor c = ((i == 0 || i == LED_COUNT-1) && on) ? dimColor(RgbColor(255,0,0))
-                                                        : dimColor(RgbColor(0));
-      strip.SetPixelColor(i, c);
+// ================== LED TASK / API ==================
+// We'll drive the strip from a dedicated FreeRTOS task so LED updates
+// are applied immediately and are not starved by heavy display SPI work.
+
+// Task handle + desired-state variables (shared with main loop)
+TaskHandle_t ledTaskHandle = NULL;
+volatile int  led_desired_lit = 0;      // desired number of lit LEDs (0..LED_COUNT)
+volatile uint8_t led_desired_mask = 0;  // priority flags mask: bit3=red,bit2=yellow,bit1=blue,bit0=green
+volatile bool led_request_clear = false;
+volatile bool led_no_data_mode = false;
+
+// portMUX for atomic critical sections (required by IDF v5+)
+portMUX_TYPE ledMux = portMUX_INITIALIZER_UNLOCKED;
+
+// helper: notify the LED task that state changed
+static inline void notifyLedTask() {
+  if (ledTaskHandle) xTaskNotifyGive(ledTaskHandle);
+}
+
+// LED driving task
+void ledTask(void *pv) {
+  (void)pv;
+  RgbColor lastColors[LED_COUNT];
+  for (int i = 0; i < LED_COUNT; ++i) {
+    lastColors[i] = dimColor(RgbColor(0));
+    strip.SetPixelColor(i, lastColors[i]);
+  }
+  strip.Show();
+
+  const unsigned long flashPeriod = 250;
+  const unsigned long noDataBlinkPeriod = 1000;
+  unsigned long lastFlash = 0;
+  unsigned long lastNoDataBlink = 0;
+  bool flashState = false;
+  bool noDataOn = false;
+
+  while (true) {
+    // Wait for a notify, but wake periodically (30ms) to handle flashing and no-data blinking.
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(30)); // clears notification when returned
+
+    unsigned long now = millis();
+
+    // copy desired state atomically
+    portENTER_CRITICAL(&ledMux);
+    int lit = led_desired_lit;
+    uint8_t mask = led_desired_mask;
+    bool request_clear = led_request_clear;
+    bool noDataMode = led_no_data_mode;
+    portEXIT_CRITICAL(&ledMux);
+
+    // If explicit clear requested, override everything
+    if (request_clear) {
+      bool needShow = false;
+      RgbColor off = dimColor(RgbColor(0));
+      for (int i = 0; i < LED_COUNT; ++i) {
+        if (lastColors[i].R != off.R || lastColors[i].G != off.G || lastColors[i].B != off.B) {
+          strip.SetPixelColor(i, off);
+          lastColors[i] = off;
+          needShow = true;
+        }
+      }
+      if (needShow) strip.Show();
+      // clear the request (atomically)
+      portENTER_CRITICAL(&ledMux);
+      led_request_clear = false;
+      portEXIT_CRITICAL(&ledMux);
+      continue;
     }
-    strip.Show();
-    lastOn = on;
+
+    // No-data special mode: blink only first and last LED red (like original)
+    if (noDataMode) {
+      if (now - lastNoDataBlink >= noDataBlinkPeriod) {
+        lastNoDataBlink = now;
+        noDataOn = !noDataOn;
+      }
+      RgbColor onColor = dimColor(RgbColor(255,0,0));
+      RgbColor off = dimColor(RgbColor(0));
+      bool needShow = false;
+      for (int i = 0; i < LED_COUNT; ++i) {
+        RgbColor out = off;
+        if ((i == 0 || i == LED_COUNT - 1) && noDataOn) out = onColor;
+        if (lastColors[i].R != out.R || lastColors[i].G != out.G || lastColors[i].B != out.B) {
+          strip.SetPixelColor(i, out);
+          lastColors[i] = out;
+          needShow = true;
+        }
+      }
+      if (needShow) strip.Show();
+      continue;
+    }
+
+    // Priority: flashing flags
+    if (mask) {
+      if (now - lastFlash >= flashPeriod) {
+        lastFlash = now;
+        flashState = !flashState;
+      }
+      RgbColor c = dimColor(RgbColor(0));
+      if (mask & 8)       c = dimColor(RgbColor(255,0,0));   // red
+      else if (mask & 4)  c = dimColor(RgbColor(255,140,0)); // yellow/orange
+      else if (mask & 2)  c = dimColor(RgbColor(0,0,255));   // blue
+      else if (mask & 1)  c = dimColor(RgbColor(0,255,0));   // green
+
+      bool needShow = false;
+      RgbColor off = dimColor(RgbColor(0));
+      for (int i = 0; i < LED_COUNT; ++i) {
+        RgbColor out = (flashState ? c : off);
+        if (lastColors[i].R != out.R || lastColors[i].G != out.G || lastColors[i].B != out.B) {
+          strip.SetPixelColor(i, out);
+          lastColors[i] = out;
+          needShow = true;
+        }
+      }
+      if (needShow) strip.Show();
+      continue;
+    }
+
+    // Normal rev-bar behavior: lit LEDs from 0..LED_COUNT (lit is set via main code)
+    if (lit < 0) lit = 0;
+    if (lit > LED_COUNT) lit = LED_COUNT;
+
+    bool needShow = false;
+    for (int i = 0; i < LED_COUNT; ++i) {
+      RgbColor c = dimColor(RgbColor(0));
+      if (i < lit) {
+        if (i == 0)           c = dimColor(RgbColor(0,255,0));        // G
+        else if (i <= 2)      c = dimColor(RgbColor(255,140,0));      // O
+        else if (i <= 5)      c = dimColor(RgbColor(255,0,0));        // R
+        else                  c = dimColor(RgbColor(0,0,255));        // top = blue
+        if (i >= LED_COUNT - 2) c = dimColor(RgbColor(0,0,255));      // force top two blue
+      }
+      if (lastColors[i].R != c.R || lastColors[i].G != c.G || lastColors[i].B != c.B) {
+        strip.SetPixelColor(i, c);
+        lastColors[i] = c;
+        needShow = true;
+      }
+    }
+    if (needShow) strip.Show();
   }
 }
 
-void clearAllLeds() {
-  for (int i = 0; i < LED_COUNT; i++) strip.SetPixelColor(i, dimColor(RgbColor(0)));
-  strip.Show();
+// --- Non-blocking setters (main loop uses these) ---
+void setRevBarStateImmediate(int lit, uint8_t mask) {
+  if (lit < 0) lit = 0;
+  if (lit > LED_COUNT) lit = LED_COUNT;
+  portENTER_CRITICAL(&ledMux);
+  led_desired_lit = lit;
+  led_desired_mask = mask;
+  portEXIT_CRITICAL(&ledMux);
+  notifyLedTask();
+}
+
+void requestClearLeds() {
+  portENTER_CRITICAL(&ledMux);
+  // also ensure no-data-mode is off when clearing
+  led_no_data_mode = false;
+  led_request_clear = true;
+  portEXIT_CRITICAL(&ledMux);
+  notifyLedTask();
+}
+
+void setNoDataLeds() {
+  // request the special no-data blink mode
+  portENTER_CRITICAL(&ledMux);
+  led_no_data_mode = true;
+  portEXIT_CRITICAL(&ledMux);
+  notifyLedTask();
 }
 
 // ================== PIT LIMITER OVERLAY ==================
@@ -532,53 +680,29 @@ void drawLapCounter() {
   cTotLaps = totLaps;
 }
 
-// ================== LEDs ==================
+// ================== LEDs (main loop helper) ==================
+// drawRevLEDs now only computes the desired lit count and mask and
+// notifies the LED task which applies the update immediately.
 void drawRevLEDs(){
   unsigned long now = millis();
-  if (now - lastDataTime > 2000) return;
+  if (now - lastDataTime > 2000) return; // task handles no-data mode separately
 
-  static bool flashState = false; 
-  static unsigned long lastFlash = 0; 
-  const unsigned long flashPeriod = 250;
-  static uint8_t lastMask = 0;
+  uint8_t mask = (flagRed ? 8 : 0) | (flagYellow ? 4 : 0) | (flagBlue ? 2 : 0) | (flagGreen ? 1 : 0);
 
-  uint8_t mask = (flagRed?8:0) | (flagYellow?4:0) | (flagBlue?2:0) | (flagGreen?1:0);
-  if (mask != lastMask) { lastMask = mask; flashState=false; lastFlash=0; }
+  int lit = 0;
+  if (rpm >= 0 && maxRpm > 0) {
+    const float startPct = 0.80f;
+    const float endPct   = 1.00f;
 
-  if (mask){
-    if (now - lastFlash > flashPeriod) { flashState = !flashState; lastFlash = now; }
-    RgbColor c = flagRed ? dimColor(RgbColor(255,0,0)) :
-                 flagYellow ? dimColor(RgbColor(255,140,0)) :
-                 flagBlue ? dimColor(RgbColor(0,0,255)) :
-                 dimColor(RgbColor(0,255,0));
-    for (int i=0;i<LED_COUNT;i++) strip.SetPixelColor(i, flashState ? c : dimColor(RgbColor(0)));
-    strip.Show();
-    return;
+    float norm = (float)rpm / (float)maxRpm;
+    float pct  = (norm - startPct) / (endPct - startPct);
+    if (pct < 0) pct = 0; if (pct > 1) pct = 1;
+
+    lit = roundf(pct * LED_COUNT);
+    if (lit < 0) lit = 0; if (lit > LED_COUNT) lit = LED_COUNT;
   }
 
-  if (rpm < 0 || maxRpm <= 0) { clearAllLeds(); return; }
-
-  const float startPct = 0.80f; // first LED wakes up here
-  const float endPct   = 1.00f; // full bar by here, shift or pray
-
-  float norm = (float)rpm / (float)maxRpm;
-  float pct  = (norm - startPct) / (endPct - startPct);
-  if (pct < 0) pct = 0; if (pct > 1) pct = 1;
-
-  int lit = round(pct * LED_COUNT);            // instant response
-
-  for (int i=0; i<LED_COUNT; i++) {
-    RgbColor c = dimColor(RgbColor(0));
-    if (i < lit) {
-      if (i == 0)           c = dimColor(RgbColor(0,255,0));        // G
-      else if (i <= 2)      c = dimColor(RgbColor(255,140,0));      // O
-      else if (i <= 5)      c = dimColor(RgbColor(255,0,0));        // R
-      else                  c = dimColor(RgbColor(0,0,255));        // last 2 = BLUE
-      if (i >= LED_COUNT - 2) c = dimColor(RgbColor(0,0,255));      // hard-lock top two to blue
-    }
-    strip.SetPixelColor(i, c);
-  }
-  strip.Show();
+  setRevBarStateImmediate(lit, mask);
 }
 
 // ================== CSV ==================
@@ -642,7 +766,12 @@ void setup(){
   #endif
 
   strip.Begin();
-  clearAllLeds();
+
+  // Start LED task so it owns strip.Show() and RMT timing.
+  xTaskCreatePinnedToCore(ledTask, "ledTask", 4096, NULL, 2, &ledTaskHandle, 1);
+
+  // Ensure LEDs start cleared
+  requestClearLeds();
 
   tft.begin();
   // tft.setSPISpeed(40000000);
@@ -674,7 +803,10 @@ void loop(){
   }
 
   if (noDataScreenActive) {
-    drawStatic(); clearAllLeds(); noDataScreenActive = false;
+    drawStatic();
+    // clear leds and leave no-data mode off
+    requestClearLeds();
+    noDataScreenActive = false;
     crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
     ccurLap = -1; cTotLaps = -1;
     cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
@@ -684,10 +816,12 @@ void loop(){
   if (pitLimiterOn) {
     if (!pitScreenActive) { tft.fillScreen(ILI9341_WHITE); pitScreenActive = true; }
     drawPitLimiterOverlayBlink();
-    drawRevLEDs(); // keep rev LEDs in pit
+    drawRevLEDs(); // keep rev LEDs in pit (this quickly notifies LED task)
     return;
   } else if (pitScreenActive) {
-    drawStatic(); clearAllLeds(); pitScreenActive = false;
+    drawStatic();
+    requestClearLeds();
+    pitScreenActive = false;
     crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
     ccurLap = -1; cTotLaps = -1;
     cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
@@ -701,5 +835,5 @@ void loop(){
   drawSpeedRpmStack();// left-bottom
   drawTyreTemps();    // right-bottom
 
-  drawRevLEDs();      // LEDs last
+  drawRevLEDs();      // LEDs: compute desired state and notify task
 }

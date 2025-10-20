@@ -56,9 +56,7 @@ Once finalized, **STL and project files will be published** in this repo.
 - vertical spacing
 
 ## Known Issues (WIP)
-- Layout and font baselines not final; subject to change.
-- SimHub CSV sender must be configured manually.
-- Refresh flickering
+- Reverse gear not showing
 
 ---
 

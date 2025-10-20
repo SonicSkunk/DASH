@@ -50,8 +50,6 @@ static inline RgbColor dimColor(RgbColor c) {
     (uint8_t)(c.B * LED_BRIGHTNESS)
   );
 }
-// cap LED update rate
-const uint16_t LED_REFRESH_MS = 8;
 
 // ================== COLORS ==================
 const uint16_t C_BG  = ILI9341_BLACK;
@@ -539,10 +537,6 @@ void drawRevLEDs(){
   unsigned long now = millis();
   if (now - lastDataTime > 2000) return;
 
-  static unsigned long lastLedUpdate = 0;
-  if (now - lastLedUpdate < LED_REFRESH_MS) return; // rate limit
-  lastLedUpdate = now;
-
   static bool flashState = false; 
   static unsigned long lastFlash = 0; 
   const unsigned long flashPeriod = 250;
@@ -559,25 +553,19 @@ void drawRevLEDs(){
                  dimColor(RgbColor(0,255,0));
     for (int i=0;i<LED_COUNT;i++) strip.SetPixelColor(i, flashState ? c : dimColor(RgbColor(0)));
     strip.Show();
-    delayMicroseconds(50);
     return;
   }
 
   if (rpm < 0 || maxRpm <= 0) { clearAllLeds(); return; }
 
-  const float startPct = 0.75f; // first LED wakes up here
-  const float endPct   = 0.90f; // full bar by here, shift or pray
+  const float startPct = 0.80f; // first LED wakes up here
+  const float endPct   = 1.00f; // full bar by here, shift or pray
 
   float norm = (float)rpm / (float)maxRpm;
   float pct  = (norm - startPct) / (endPct - startPct);
   if (pct < 0) pct = 0; if (pct > 1) pct = 1;
 
-  int target = round(pct * LED_COUNT);
-
-  static int lastLit = 0;
-  if (target > lastLit) lastLit++;
-  else if (target < lastLit && (now & 1)) lastLit--;
-  int lit = lastLit;
+  int lit = round(pct * LED_COUNT);            // instant response
 
   for (int i=0; i<LED_COUNT; i++) {
     RgbColor c = dimColor(RgbColor(0));
@@ -586,14 +574,11 @@ void drawRevLEDs(){
       else if (i <= 2)      c = dimColor(RgbColor(255,140,0));      // O
       else if (i <= 5)      c = dimColor(RgbColor(255,0,0));        // R
       else                  c = dimColor(RgbColor(0,0,255));        // last 2 = BLUE
+      if (i >= LED_COUNT - 2) c = dimColor(RgbColor(0,0,255));      // hard-lock top two to blue
     }
-    // hard-lock the top two when lit
-    if (i >= LED_COUNT - 2 && i < lit) c = dimColor(RgbColor(0,0,255));
-
     strip.SetPixelColor(i, c);
   }
   strip.Show();
-  delayMicroseconds(50);
 }
 
 // ================== CSV ==================

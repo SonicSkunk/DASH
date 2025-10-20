@@ -58,6 +58,7 @@ Once finalized, **STL and project files will be published** in this repo.
 ## Known Issues (WIP)
 - Reverse gear not showing
 - infinity symbol on lap counter not showing correctly
+- weird led refresh behavior
 ---
 
 ## License

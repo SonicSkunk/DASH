@@ -71,6 +71,9 @@ int tyreFL = 0, tyreFR = 0, tyreRL = 0, tyreRR = 0;
 int curLap = 0;
 int totLaps = 0;
 
+// Pit limiter (from SimHub).
+int pitLimiterOn = 0;
+
 // ================== CHANGE-TRACKING ==================
 int crpm=-1, cspeed=-1, cgear=-999, cpos=-1;
 long clap=-1, cbest=-1, cdelta=LONG_MIN/2;
@@ -80,6 +83,8 @@ int cTyreFL = INT_MIN, cTyreFR = INT_MIN, cTyreRL = INT_MIN, cTyreRR = INT_MIN;
 // ================== DATA FRESHNESS ==================
 unsigned long lastDataTime = 0;
 bool noDataScreenActive = false;
+// Pit overlay state.
+bool pitScreenActive = false;
 
 // ================== LAYOUT ==================
 const int M  = 6;     // margin
@@ -267,6 +272,34 @@ void setNoDataLeds() {
 void clearAllLeds() {
   for (int i = 0; i < LED_COUNT; i++) strip.SetPixelColor(i, dimColor(RgbColor(0)));
   strip.Show();
+}
+
+// ================== PIT LIMITER OVERLAY ==================
+void drawPitLimiterOverlayBlink() {
+  static unsigned long lastBlink = 0;
+  static bool showText = true;
+  unsigned long now = millis();
+  const unsigned long period = 400; // blink rate
+
+  if (now - lastBlink >= period) {
+    lastBlink = now;
+    showText = !showText;
+    // full white background every toggle to keep it clean
+    tft.fillScreen(ILI9341_WHITE);
+    if (showText) {
+      // Try 66pt, fallback to 48pt if it won't fit.
+      const GFXfont* f = &FreeSansBold66pt7b;
+      int16_t bx, by; uint16_t bw, bh;
+      tft.setFont(f); tft.setTextSize(1); tft.setTextColor(ILI9341_BLUE);
+      tft.getTextBounds("PIT", 0, 0, &bx, &by, &bw, &bh);
+      if (bw > 300) { f = &FreeSansBold48pt7b; tft.setFont(f); tft.getTextBounds("PIT", 0, 0, &bx, &by, &bw, &bh); }
+      int cx = (320 - bw)/2 - bx;
+      int cy = (240 - bh)/2 - by;
+      tft.setCursor(cx, cy);
+      tft.print("PIT");
+      tft.setFont(); tft.setTextSize(1);
+    }
+  }
 }
 
 // ================== DYNAMIC DRAW (to canvases) ==================
@@ -591,6 +624,9 @@ void readCSV(){
         if (i >= 17) tyreFR = (int)v[16];
         if (i >= 18) tyreRL = (int)v[17];
         if (i >= 19) tyreRR = (int)v[18];
+
+        // Expect GameData.PitLimiterOn next if present.
+        pitLimiterOn = (i >= 20) ? (int)v[19] : 0;
       }
       line = "";
     } else {
@@ -643,6 +679,19 @@ void loop(){
 
   if (noDataScreenActive) {
     drawStatic(); clearAllLeds(); noDataScreenActive = false;
+    crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
+    ccurLap = -1; cTotLaps = -1;
+    cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
+  }
+
+  // Pit limiter overlay has priority for the screen; LEDs keep showing revs.
+  if (pitLimiterOn) {
+    if (!pitScreenActive) { tft.fillScreen(ILI9341_WHITE); pitScreenActive = true; }
+    drawPitLimiterOverlayBlink();
+    drawRevLEDs(); // keep rev LEDs in pit
+    return;
+  } else if (pitScreenActive) {
+    drawStatic(); clearAllLeds(); pitScreenActive = false;
     crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
     ccurLap = -1; cTotLaps = -1;
     cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;

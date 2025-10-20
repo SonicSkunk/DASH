@@ -52,7 +52,6 @@ static inline RgbColor dimColor(RgbColor c) {
 }
 
 // ================== COLORS ==================
-// House palette.
 const uint16_t C_BG  = ILI9341_BLACK;
 const uint16_t C_TX  = ILI9341_WHITE;
 const uint16_t C_BOX = ILI9341_YELLOW;
@@ -60,7 +59,7 @@ const uint16_t C_OK  = ILI9341_GREEN;
 const uint16_t C_BAD = ILI9341_RED;
 
 // ================== STATE ==================
-// Telemetry stash. Fed by CSV. If you see nonsense, your input is nonsense.
+// Telemetry stash. Fed by CSV.
 int rpm=0, maxRpm=8000, speed=0, gear=0, pos=0;
 long lapMs=0, bestMs=0, deltaMs=0;
 int flagYellow=0, flagBlue=0, flagRed=0, flagGreen=0;
@@ -73,19 +72,16 @@ int curLap = 0;
 int totLaps = 0;
 
 // ================== CHANGE-TRACKING ==================
-// Cached values so we only redraw when something actually changes.
 int crpm=-1, cspeed=-1, cgear=-999, cpos=-1;
 long clap=-1, cbest=-1, cdelta=LONG_MIN/2;
 int ccurLap = -1, cTotLaps = -1;
 int cTyreFL = INT_MIN, cTyreFR = INT_MIN, cTyreRL = INT_MIN, cTyreRR = INT_MIN;
 
 // ================== DATA FRESHNESS ==================
-// If the feed goes quiet, we show a 'NO DATA FEED' screen and blink LEDs.
 unsigned long lastDataTime = 0;
 bool noDataScreenActive = false;
 
 // ================== LAYOUT ==================
-// Pixel math. Touch this if you enjoy UI Tetris.
 const int M  = 6;     // margin
 const int G  = 8;     // gap
 const int BW = 92;    // side box width
@@ -109,7 +105,6 @@ const int BBW = (320 - (3*M))/2;
 const int BLX = M;
 const int BRX = BLX + BBW + M;
 
-// Speed/RPM area uses whatever is left between Y2 and bottom row.
 static inline int BH_speedFuel() { return (GY + GH) - Y2; }
 
 // ================== USED FONTS ==================
@@ -124,7 +119,6 @@ static const GFXfont* FONT_TYRE_LABEL = &FreeSans8pt7b;
 static const GFXfont* FONT_LAP_NUMBER = &FreeSansBold18pt7b;
 
 // ================== HELPERS ==================
-// Converts milliseconds to mm:ss.mmm
 static inline String msToStr(long ms) {
   bool neg = ms < 0; if (neg) ms = -ms;
   long t = ms/1000, mm = t/60, ss = t%60, sss = ms%1000;
@@ -132,10 +126,8 @@ static inline String msToStr(long ms) {
   snprintf(b, sizeof(b), "%s%ld:%02ld.%03ld", neg?"-":"", mm, ss, sss);
   return String(b);
 }
-// Draws a neat box outline.
 void frame(int x,int y,int w,int h){ tft.drawRect(x,y,w,h,C_BOX); }
 
-// Canvas-only helpers. They measure text and center it.
 static void centeredText_onCanvas(GFXcanvas16& cv,int x,int y,int w,int h,const GFXfont* font,const String& s,uint16_t col, uint16_t bg){
   cv.fillRect(x+2,y+2,w-4,h-4,bg);
   cv.setTextWrap(false);
@@ -181,8 +173,38 @@ static void twoLine_onCanvas(GFXcanvas16& cv,int x,int y,int w,int h,const GFXfo
   cv.setFont(); cv.setTextSize(1);
 }
 
+static void twoLine_onCanvasGap(GFXcanvas16& cv,int x,int y,int w,int h,
+                                const GFXfont* topFont,const String& top,
+                                const GFXfont* botFont,const String& bottom,
+                                uint16_t col, uint16_t bg, int gap){
+  cv.fillRect(x+2,y+2,w-4,h-4,bg);
+  cv.setTextWrap(false);
+
+  cv.setFont(topFont); cv.setTextSize(1);
+  int16_t tbx,tby; uint16_t tbw,tbh;
+  cv.getTextBounds(top, 0, 0, &tbx, &tby, &tbw, &tbh);
+
+  cv.setFont(botFont); cv.setTextSize(1);
+  int16_t bbx,bby; uint16_t bbw,bbh;
+  cv.getTextBounds(bottom, 0, 0, &bbx, &bby, &bbw, &bbh);
+
+  int totalH = (int)tbh + gap + (int)bbh;
+  int blockTop = y + (h - totalH)/2;
+
+  int topBaseline = blockTop - tby;
+  int botBaseline = blockTop + tbh + gap - bby;
+
+  int cxTop = x + (w - tbw)/2 - tbx;
+  int cxBot = x + (w - bbw)/2 - bbx;
+
+  cv.setTextColor(col);
+  cv.setFont(topFont); cv.setCursor(cxTop, topBaseline); cv.print(top);
+  cv.setFont(botFont); cv.setCursor(cxBot, botBaseline); cv.print(bottom);
+
+  cv.setFont(); cv.setTextSize(1);
+}
+
 // ================== OFFSCREEN CANVASES ==================
-// Each widget gets its own canvas. We draw there, then blit once.
 GFXcanvas16 *cvLap      = nullptr; // Lap counter
 GFXcanvas16 *cvSpeedRpm = nullptr; // Speed + RPM
 GFXcanvas16 *cvPos      = nullptr; // Position
@@ -196,7 +218,6 @@ inline void blit(int x,int y,GFXcanvas16& c){
 }
 
 // ================== STATIC BACKGROUND ==================
-// Draw once. If you’re redrawing this every frame, expect a flicker fest.
 void drawStatic(){
   tft.fillScreen(C_BG);
 
@@ -217,7 +238,6 @@ void drawStatic(){
 }
 
 // ================== NO DATA ==================
-// 'NO DATA FEED' screen when no data input.
 void drawNoDataScreen() {
   tft.fillScreen(C_BG);
   tft.setFont(); tft.setTextSize(3); tft.setTextColor(C_BAD);
@@ -250,7 +270,6 @@ void clearAllLeds() {
 }
 
 // ================== DYNAMIC DRAW (to canvases) ==================
-// Speed + RPM stacked.
 void drawSpeedRpmStack(){
   static unsigned long lastDraw = 0;
   if (speed == cspeed && rpm == crpm) return;
@@ -258,8 +277,10 @@ void drawSpeedRpmStack(){
   if (now - lastDraw < 25) return; // ~40 Hz
 
   cvSpeedRpm->fillScreen(C_BG);
-  twoLine_onCanvas(*cvSpeedRpm, 0, 0, cvSpeedRpm->width(), cvSpeedRpm->height(),
-                   FONT_SPEED, String(speed), FONT_RPM, String(rpm), C_TX, C_BG);
+  twoLine_onCanvasGap(*cvSpeedRpm, 0, 0, cvSpeedRpm->width(), cvSpeedRpm->height(),
+                      FONT_SPEED, String(speed),
+                      FONT_RPM,   String(rpm),
+                      C_TX, C_BG, 12);   // was ~6, now roomier
 
   blit(LX+2, Y2+2, *cvSpeedRpm);
   cspeed = speed; crpm = rpm; lastDraw = now;
@@ -279,10 +300,14 @@ void drawTyreTemps() {
   int halfW = boxW / 2;
   int halfH = boxH / 2;
 
-  twoLine_onCanvas(*cvTyres, 0, 0, halfW, halfH,  FONT_TYRE_LABEL, "FL", FONT_TYRE_VALUE, String(tyreFL), C_TX, C_BG);
-  twoLine_onCanvas(*cvTyres, halfW, 0, boxW-halfW, halfH,  FONT_TYRE_LABEL, "FR", FONT_TYRE_VALUE, String(tyreFR), C_TX, C_BG);
-  twoLine_onCanvas(*cvTyres, 0, halfH, halfW, boxH-halfH,  FONT_TYRE_LABEL, "RL", FONT_TYRE_VALUE, String(tyreRL), C_TX, C_BG);
-  twoLine_onCanvas(*cvTyres, halfW, halfH, boxW-halfW, boxH-halfH,  FONT_TYRE_LABEL, "RR", FONT_TYRE_VALUE, String(tyreRR), C_TX, C_BG);
+  twoLine_onCanvas(*cvTyres, 0,      0,      halfW,      halfH,      FONT_TYRE_LABEL, "FL", FONT_TYRE_VALUE, String(tyreFL), C_TX, C_BG);
+  twoLine_onCanvas(*cvTyres, halfW,  0,      boxW-halfW, halfH,      FONT_TYRE_LABEL, "FR", FONT_TYRE_VALUE, String(tyreFR), C_TX, C_BG);
+  twoLine_onCanvas(*cvTyres, 0,      halfH,  halfW,      boxH-halfH, FONT_TYRE_LABEL, "RL", FONT_TYRE_VALUE, String(tyreRL), C_TX, C_BG);
+  twoLine_onCanvas(*cvTyres, halfW,  halfH,  boxW-halfW, boxH-halfH, FONT_TYRE_LABEL, "RR", FONT_TYRE_VALUE, String(tyreRR), C_TX, C_BG);
+
+  // Yellow cross overlay so each tyre sits in its own little box
+  cvTyres->drawFastVLine(halfW, 0,     boxH, C_BOX);
+  cvTyres->drawFastHLine(0,     halfH, boxW, C_BOX);
 
   blit(RXc+2, Y2+2, *cvTyres);
 
@@ -320,7 +345,7 @@ void drawGear(){
   cgear = gear; lastDraw = now;
 }
 
-// Big fat “P#”. If you’re not P1, drive faster.
+// Big fat “P#”.
 void drawPosBig(){
   if(pos==cpos) return;
 
@@ -383,7 +408,7 @@ void drawLapBest() {
   clap = lapMs; cbest = bestMs;
 }
 
-// Delta with sign, centered and color-coded. Green good, red bad, shocker.
+// Delta
 static const int DELTA_BASELINE_FIX = 0;
 void drawDelta() {
   if (deltaMs == cdelta) return;
@@ -418,7 +443,6 @@ void drawDelta() {
 }
 
 // ================== LAP COUNTER ==================
-// Shows "cur/total". If total is 0, draws a infinity symbol.
 void drawLapCounter() {
   if (curLap == ccurLap && totLaps == cTotLaps) return;
 
@@ -438,7 +462,7 @@ void drawLapCounter() {
     cvLap->setFont(); cvLap->setTextSize(1);
 
   } else {
-    // "cur/∞" with a DIY infinity.
+    // "cur/∞"
     String sLeft = String(curLap) + "/";
     cvLap->setFont(FONT_LAP_NUMBER);
     cvLap->setTextSize(1);
@@ -476,8 +500,6 @@ void drawLapCounter() {
 }
 
 // ================== LEDs ==================
-// Flags override everything and blink. Otherwise, ease into a staged rev bar.
-// Adjust startPct/endPct if you enjoy shifting at 3k like it’s 1998.
 void drawRevLEDs(){
   unsigned long now = millis();
   if (now - lastDataTime > 2000) return;
@@ -531,10 +553,6 @@ void drawRevLEDs(){
 }
 
 // ================== CSV ==================
-// Expects up to 19 fields (we read up to 25 just in case):
-// 0 rpm, 1 speed, 2 gear, 3 pos, 5 lapMs, 6 bestMs, 7 deltaMs, 8 maxRpm,
-// 9-12 flags(Y,B,R,G), 13 curLap, 14 totLaps, 15-18 tyre FL/FR/RL/RR.
-// If your feed is different, fix your sender. Or map here.
 void readCSV(){
   static String line;
   while (Serial.available()) {
@@ -577,13 +595,12 @@ void readCSV(){
       line = "";
     } else {
       line += ch;
-      if (line.length() > 1024) line = ""; // if your app spams garbage, we bail
+      if (line.length() > 1024) line = "";
     }
   }
 }
 
 // ================== BOOT ==================
-// Kills WiFi/BT, starts LEDs/TFT, allocates canvases, draws static chrome. Done.
 void setup(){
   Serial.begin(115200);
 
@@ -596,12 +613,12 @@ void setup(){
   clearAllLeds();
 
   tft.begin();
-  // tft.setSPISpeed(40000000); // Use if your ILI9341 lib supports it and your wiring isn’t a meme.
+  // tft.setSPISpeed(40000000);
   tft.setRotation(1);
   tft.setTextWrap(false);
   tft.setTextSize(1);
 
-  // Allocate canvases to exactly the inner sizes of the frames. No wasted pixels.
+  // Allocate canvases to exactly the inner sizes of the frames.
   cvLap      = new GFXcanvas16(BW-4,               BH-4);
   cvSpeedRpm = new GFXcanvas16(BW-4,               BH_speedFuel()-4);
   cvPos      = new GFXcanvas16(BW-4,               BH-4);
@@ -615,7 +632,6 @@ void setup(){
 }
 
 // ================== MAIN LOOP ==================
-// Read feed, handle no-data mode, then redraw only what changed. LEDs last.
 void loop(){
   readCSV();
 
@@ -632,7 +648,6 @@ void loop(){
     cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
   }
 
-  // Draw widgets (only blit on change; canvases avoid flicker)
   drawLapCounter();   // top-left
   drawPosBig();       // right-top
   drawLapBest();      // bottom-left
@@ -641,6 +656,5 @@ void loop(){
   drawSpeedRpmStack();// left-bottom
   drawTyreTemps();    // right-bottom
 
-  // LEDs last.
-  drawRevLEDs();
+  drawRevLEDs();      // LEDs last
 }

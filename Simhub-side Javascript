@@ -20,6 +20,7 @@
 // 17 TYRE_RL (TyreTemperatureRearLeft)
 // 18 TYRE_RR (TyreTemperatureRearRight)
 // 19 PIT_LIMITER_ON  (GameData.PitLimiterOn -> 0/1)
+// 20 ENGINE_IGNITION_ON (GameData.EngineIgnitionOn -> 0/1)
 //
 // NOTE: dash expects tyre temps in the order FL, FR, RL, RR at indices 15..18 (0-based).
 
@@ -116,12 +117,24 @@ let tyreRR = int($prop('DataCorePlugin.GameData.TyreTemperatureRearRight')) ||
 let pitLimiterOn = int($prop('DataCorePlugin.GameData.PitLimiterOn')) ||
                    int($prop('GameData.PitLimiterOn')) || 0;
 
-// Return CSV line (append pit limiter at the end to match ESP32 index 19)
+// --- Engine Ignition (robust lookup, default = 1 if property not present)
+// We must avoid "|| 1" after int() because 0 (ignition off) is falsy.
+// Use explicit existence check so a real 0 is preserved.
+function propExists(p){ let v = $prop(p); return !(v===null||v===undefined||v===""); }
+let engineIgnitionOn = 1;
+if (propExists('DataCorePlugin.GameData.EngineIgnitionOn')) {
+  engineIgnitionOn = int($prop('DataCorePlugin.GameData.EngineIgnitionOn'));
+} else if (propExists('GameData.EngineIgnitionOn')) {
+  engineIgnitionOn = int($prop('GameData.EngineIgnitionOn'));
+} // else keep default 1
+
+// Return CSV line (append pit limiter and ignition at the end to match ESP32 indices 19/20)
 return [
   rpm, speed, gear, pos, fuel,
   lapMs, bestMs, deltaMs, maxRpm,
   flagYellow, flagBlue, flagRed, flagGreen,
   curLap, totLaps,
   tyreFL, tyreFR, tyreRL, tyreRR,
-  pitLimiterOn
+  pitLimiterOn,
+  engineIgnitionOn
 ].join(',') + "\n";

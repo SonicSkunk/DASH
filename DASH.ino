@@ -631,7 +631,15 @@ void drawDelta() {
   if (whole < 10) snprintf(buf, sizeof(buf), "%c %d.%03d", sign, whole, frac);
   else snprintf(buf, sizeof(buf), "%c%02d.%03d", sign, whole, frac);
 
+  // Preserve the original green/red/neutral colors even when display is inverted.
+  // When the hardware display inversion is active (pitInvertActive), the
+  // rendered pixels will be inverted by the display. To counteract that and
+  // keep the perceived colors the same (green for negative, red for positive),
+  // pre-invert the color we draw so the hardware inversion yields the intended color.
   uint16_t col = (v < 0) ? C_OK : (v > 0 ? C_BAD : C_TX);
+  if (pitInvertActive) {
+    col = (uint16_t)(~col); // bitwise invert 16-bit color so hardware inversion restores original
+  }
 
   cvDelta->setTextSize(1);
   cvDelta->setFont(FONT_DELTA);
@@ -881,19 +889,19 @@ void loop(){
     cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
   }
 
-  // Pit limiter overlay: new behaviour — don't hide the whole dash.
-  // Instead, invert the display colors while pitLimiterOn, and blink a 'P'
-  // inside the gear box. LEDs continue to show revs.
-  if (pitLimiterOn) {
+  // Pit limiter: set invert/flags but still update the full dash.
+  // Previously the code returned early while in pit mode which stopped all
+  // other UI updates and made the display appear frozen. To keep the same
+  // appearance but keep values updating, we set the invert state here but
+  // continue with normal drawing and then draw the blinking 'P' overlay on top.
+  bool inPit = pitLimiterOn;
+  if (inPit) {
     if (!pitScreenActive) {
       // entering pit; invert display for emphasis
       tft.invertDisplay(true);
       pitInvertActive = true;
       pitScreenActive = true;
     }
-    drawPitLimiterOverlayBlink();
-    drawRevLEDs(); // keep rev LEDs in pit (this quickly notifies LED task)
-    return;
   } else if (pitScreenActive) {
     // leaving pit; restore normal appearance
     if (pitInvertActive) {
@@ -908,6 +916,7 @@ void loop(){
     cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
   }
 
+  // Regular updates (always run, even when pit limiter is active)
   drawLapCounter();   // top-left
   drawPosBig();       // right-top
   drawLapBest();      // bottom-left
@@ -917,4 +926,10 @@ void loop(){
   drawTyreTemps();    // right-bottom
 
   drawRevLEDs();      // LEDs: compute desired state and notify task
+
+  // If pit limiter is on, draw the blinking 'P' overlay on top of the gear box.
+  if (inPit) {
+    drawPitLimiterOverlayBlink();
+    // Keep rev LEDs updating while in pit (already called above).
+  }
 }

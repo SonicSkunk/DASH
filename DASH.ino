@@ -74,15 +74,25 @@ int totLaps = 0;
 // Pit limiter (from SimHub).
 int pitLimiterOn = 0;
 
+// Engine ignition property (GameData.EngineIgnitionOn from SimHub).
+// Default to "on" if not provided in the CSV stream.
+int engineIgnitionOn = 1;
+
 // ================== CHANGE-TRACKING ==================
 int crpm=-1, cspeed=-1, cgear=-999, cpos=-1;
 long clap=-1, cbest=-1, cdelta=LONG_MIN/2;
 int ccurLap = -1, cTotLaps = -1;
 int cTyreFL = INT_MIN, cTyreFR = INT_MIN, cTyreRL = INT_MIN, cTyreRR = INT_MIN;
+int cEngineIgnitionOn = -1;
 
 // ================== DATA FRESHNESS ==================
 unsigned long lastDataTime = 0;
 bool noDataScreenActive = false;
+// Ignition-off screen state
+bool ignitionScreenActive = false;
+// If we temporarily clear the hardware-inversion for ignition-off while in pit,
+// remember to restore it when ignition returns.
+bool ignitionClearedPitInvert = false;
 // Pit overlay state.
 bool pitScreenActive = false;
 // Track whether we've applied display inversion for pit mode
@@ -124,6 +134,8 @@ static const GFXfont* FONT_DELTA      = &FreeSansBold18pt7b;
 static const GFXfont* FONT_TYRE_VALUE = &FreeSansBold12pt7b;
 static const GFXfont* FONT_TYRE_LABEL = &FreeSans8pt7b;
 static const GFXfont* FONT_LAP_NUMBER = &FreeSansBold18pt7b;
+// New message font for NO DATA and IGNITION OFF
+static const GFXfont* FONT_MESSAGE    = &FreeSansBold12pt7b;
 
 // ================== HELPERS ==================
 static inline String msToStr(long ms) {
@@ -247,12 +259,28 @@ void drawStatic(){
 // ================== NO DATA ==================
 void drawNoDataScreen() {
   tft.fillScreen(C_BG);
-  tft.setFont(); tft.setTextSize(3); tft.setTextColor(C_BAD);
+  // Use larger included font for consistent sizing
+  tft.setFont(FONT_MESSAGE); tft.setTextSize(1); tft.setTextColor(C_BAD);
   int16_t x1, y1; uint16_t w, h;
   String msg = "NO DATA FEED";
   tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
   int x = (320 - w) / 2; int y = (240 - h) / 2;
   tft.setCursor(x, y); tft.print(msg);
+  tft.setFont(); tft.setTextSize(1);
+}
+
+// ================ IGNITION OFF SCREEN ================
+void drawIgnitionOffScreen() {
+  // Draw the ignition screen using the larger included font and regular colors.
+  // Note: loop code may temporarily clear hardware inversion before calling this.
+  tft.fillScreen(C_BG);
+  tft.setFont(FONT_MESSAGE); tft.setTextSize(1); tft.setTextColor(C_BAD);
+  int16_t x1, y1; uint16_t w, h;
+  String msg = "IGNITION OFF";
+  tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
+  int x = (320 - w) / 2; int y = (240 - h) / 2;
+  tft.setCursor(x, y); tft.print(msg);
+  tft.setFont(); tft.setTextSize(1);
 }
 
 // ================== LED TASK / API ==================
@@ -824,6 +852,11 @@ void readCSV(){
 
         // Expect GameData.PitLimiterOn next if present.
         pitLimiterOn = (i >= 20) ? (int)v[19] : 0;
+
+        // If the EngineIgnitionOn property is present in the CSV stream from SimHub,
+        // it is expected to follow after PitLimiterOn. If not present, default to ON.
+        // SimHub property name: GameData.EngineIgnitionOn
+        engineIgnitionOn = (i >= 21) ? (int)v[20] : 1;
       }
       line = "";
     } else {
@@ -873,12 +906,14 @@ void setup(){
 void loop(){
   readCSV();
 
+  // Data-stale handling (no feed)
   if (millis() - lastDataTime > 2000) {
     if (!noDataScreenActive) { drawNoDataScreen(); noDataScreenActive = true; }
     setNoDataLeds();
     return;
   }
 
+  // If we just regained data from a no-data state, restore static background and reset trackers
   if (noDataScreenActive) {
     drawStatic();
     // clear leds and leave no-data mode off
@@ -887,6 +922,44 @@ void loop(){
     crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
     ccurLap = -1; cTotLaps = -1;
     cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
+  }
+
+  // Handle ignition-off screen: if ignition is explicitly off (from SimHub),
+  // show a dedicated IGNITION OFF screen (similar to NO DATA) but keep telemetry updating
+  // in the background. Show the same LED "no-data" blink pattern as the NO DATA screen.
+  if (engineIgnitionOn == 0) {
+    if (!ignitionScreenActive) {
+      // If we previously inverted the display for pit mode, temporarily clear inversion
+      // so the IGNITION OFF screen appears in regular colours.
+      if (pitInvertActive) {
+        tft.invertDisplay(false);
+        ignitionClearedPitInvert = true;
+      }
+      drawIgnitionOffScreen();
+      setNoDataLeds(); // same LED behaviour as NO DATA
+      ignitionScreenActive = true;
+      // keep caches so when ignition returns we'll redraw everything
+    }
+    // Stay in the ignition-off screen until ignition returns.
+    return;
+  } else {
+    // If ignition became on again, restore display once
+    if (ignitionScreenActive) {
+      // If we previously cleared pit inversion for ignition display, restore it now
+      if (ignitionClearedPitInvert) {
+        // Only re-enable if pit overlay is still active
+        if (pitScreenActive) {
+          tft.invertDisplay(true);
+        }
+        ignitionClearedPitInvert = false;
+      }
+      drawStatic();
+      requestClearLeds();
+      ignitionScreenActive = false;
+      crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
+      ccurLap = -1; cTotLaps = -1;
+      cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
+    }
   }
 
   // Pit limiter: set invert/flags but still update the full dash.

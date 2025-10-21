@@ -17,7 +17,7 @@ Drives an 8-LED shift bar via ESP32 RMT. Falls back to **NO DATA FEED** when inp
 ---
 
 <p align="center">
-  <img src="Images/Dash.jpg" width="800">
+  <img src="Images/dash.jpg" width="800">
 </p>
 
 ## Hardware
@@ -52,13 +52,12 @@ Once finalized, **STL and project files will be published** in this repo.
 ---
 
 ## To do
-- add brake bias change display
-- add traction control change display
-- add ABS change display
+- fine-tune rev bar
+- fix reverse gear displaying
+- improve delta accuracy
 
 ## Known Issues (WIP)
 - Reverse gear not showing
-- infinity symbol on lap counter not showing correctly
 ---
 
 ## License

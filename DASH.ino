@@ -85,6 +85,8 @@ unsigned long lastDataTime = 0;
 bool noDataScreenActive = false;
 // Pit overlay state.
 bool pitScreenActive = false;
+// Track whether we've applied display inversion for pit mode
+bool pitInvertActive = false;
 
 // ================== LAYOUT ==================
 const int M  = 6;     // margin
@@ -423,30 +425,55 @@ void setNoDataLeds() {
 }
 
 // ================== PIT LIMITER OVERLAY ==================
+// New behaviour:
+// - Keep the regular dash visible.
+// - In the gear box area, blink a large 'P' on/off.
+// - Invert the whole display colors while pitLimiterOn is active (hardware invert).
+// This lets the driver glance at the dash during pit and still clearly see the pit state.
+
 void drawPitLimiterOverlayBlink() {
   static unsigned long lastBlink = 0;
-  static bool showText = true;
+  static bool showText = false;
   unsigned long now = millis();
   const unsigned long period = 400; // blink rate
 
   if (now - lastBlink >= period) {
     lastBlink = now;
     showText = !showText;
-    // full white background every toggle to keep it clean
-    tft.fillScreen(ILI9341_WHITE);
+
+    // inner gear box coordinates (match how cvGear is blitted)
+    int gx = GX + 2;
+    int gy = GY + 2;
+    int gw = GW - 4;
+    int gh = GH - 4;
+
+    // Clear the gear box area first (use background so we don't get ghosting)
+    tft.fillRect(gx, gy, gw, gh, C_BG);
+
+    tft.setFont(FONT_GEAR); tft.setTextSize(1);
+    tft.setTextColor(C_BOX);
+
     if (showText) {
-      // Try 66pt, fallback to 48pt if it won't fit.
-      const GFXfont* f = &FreeSansBold66pt7b;
+      // Draw a big 'P' centered in the gear box.
       int16_t bx, by; uint16_t bw, bh;
-      tft.setFont(f); tft.setTextSize(1); tft.setTextColor(ILI9341_BLUE);
-      tft.getTextBounds("PIT", 0, 0, &bx, &by, &bw, &bh);
-      if (bw > 300) { f = &FreeSansBold48pt7b; tft.setFont(f); tft.getTextBounds("PIT", 0, 0, &bx, &by, &bw, &bh); }
-      int cx = (320 - bw)/2 - bx;
-      int cy = (240 - bh)/2 - by;
+      tft.getTextBounds("P", 0, 0, &bx, &by, &bw, &bh);
+      int cx = gx + (gw - bw)/2 - bx;
+      int cy = gy + (gh - bh)/2 - by;
       tft.setCursor(cx, cy);
-      tft.print("PIT");
-      tft.setFont(); tft.setTextSize(1);
+      tft.print("P");
+    } else {
+      // Draw the current gear value centered in the gear box (this ensures
+      // the overlay alternates between 'P' and the actual gear, not a stale 'N').
+      String g = (gear < 0) ? "R" : (gear == 0) ? "N" : String(gear);
+      int16_t bx, by; uint16_t bw, bh;
+      tft.getTextBounds(g, 0, 0, &bx, &by, &bw, &bh);
+      int cx = gx + (gw - bw)/2 - bx;
+      int cy = gy + (gh - bh)/2 - by;
+      tft.setCursor(cx, cy);
+      tft.print(g);
     }
+
+    tft.setFont(); tft.setTextSize(1);
   }
 }
 
@@ -812,13 +839,25 @@ void loop(){
     cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
   }
 
-  // Pit limiter overlay has priority for the screen; LEDs keep showing revs.
+  // Pit limiter overlay: new behaviour — don't hide the whole dash.
+  // Instead, invert the display colors while pitLimiterOn, and blink a 'P'
+  // inside the gear box. LEDs continue to show revs.
   if (pitLimiterOn) {
-    if (!pitScreenActive) { tft.fillScreen(ILI9341_WHITE); pitScreenActive = true; }
+    if (!pitScreenActive) {
+      // entering pit; invert display for emphasis
+      tft.invertDisplay(true);
+      pitInvertActive = true;
+      pitScreenActive = true;
+    }
     drawPitLimiterOverlayBlink();
     drawRevLEDs(); // keep rev LEDs in pit (this quickly notifies LED task)
     return;
   } else if (pitScreenActive) {
+    // leaving pit; restore normal appearance
+    if (pitInvertActive) {
+      tft.invertDisplay(false);
+      pitInvertActive = false;
+    }
     drawStatic();
     requestClearLeds();
     pitScreenActive = false;

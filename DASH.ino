@@ -148,7 +148,7 @@ static const GFXfont* FONT_LAP_NUMBER = &FreeSansBold18pt7b;
 // New message font for NO DATA and IGNITION OFF
 static const GFXfont* FONT_MESSAGE    = &FreeSansBold12pt7b;
 // Brake bias overlay font (user requested FreeSansBold18pt7b in blue)
-static const GFXfont* FONT_BRAKE      = &FreeSansBold18pt7b;
+static const GFXfont* FONT_BRAKE      = &FreeSansBold24pt7b;
 
 // ================== HELPERS ==================
 static inline String msToStr(long ms) {
@@ -301,7 +301,7 @@ void drawBrakeBiasOverlay() {
   // Full white background with blue text (FreeSansBold18pt7b)
   tft.fillScreen(ILI9341_WHITE);
   tft.setFont(FONT_BRAKE); tft.setTextSize(1); tft.setTextColor(ILI9341_BLUE);
-  String msg = String("brake bias ") + String(brakeBias);
+  String msg = String("B ias ") + String(brakeBias);
   int16_t x1, y1; uint16_t w, h;
   tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
   int x = (320 - w) / 2; int y = (240 - h) / 2;
@@ -915,7 +915,7 @@ void setup(){
   requestClearLeds();
 
   tft.begin();
-  // tft.setSPISpeed(40000000);
+  tft.setSPISpeed(40000000);
   tft.setRotation(1);
   tft.setTextWrap(false);
   tft.setTextSize(1);

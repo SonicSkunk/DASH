@@ -670,33 +670,75 @@ void drawLapCounter() {
     cvLap->setFont(); cvLap->setTextSize(1);
 
   } else {
-    // "cur/∞"
+    // Simple approach: render the '8' glyph from the same font into a small
+    // temporary canvas, then copy its pixels rotated 90° into cvLap.
     String sLeft = String(curLap) + "/";
+
+    // Left text metrics
     cvLap->setFont(FONT_LAP_NUMBER);
     cvLap->setTextSize(1);
-    int16_t bx, by; uint16_t bw, bh;
-    cvLap->getTextBounds(sLeft, 0, 0, &bx, &by, &bw, &bh);
+    int16_t tbx, tby; uint16_t tbw, tbh;
+    cvLap->getTextBounds(sLeft, 0, 0, &tbx, &tby, &tbw, &tbh);
 
-    const int r = 6;
-    const int overlap = r / 2;
-    const int symbolW = (r*2) + (r*2 - overlap);
+    // Measure '8'
+    const String eight = "8";
+    int16_t ebx, eby; uint16_t ebw, ebh;
+    cvLap->getTextBounds(eight, 0, 0, &ebx, &eby, &ebw, &ebh);
+
+    if (ebw < 8) ebw = 8;
+    if (ebh < 8) ebh = 8;
+
+    static GFXcanvas16* tmp = nullptr;
+    static int tmpW = 0, tmpH = 0;
+    if (!tmp || tmpW != (int)ebw || tmpH != (int)ebh) {
+      if (tmp) delete tmp;
+      tmp = new GFXcanvas16(ebw, ebh);
+      tmpW = ebw; tmpH = ebh;
+    }
+
+    // Render '8' into tmp
+    tmp->fillScreen(C_BG);
+    tmp->setFont(FONT_LAP_NUMBER);
+    tmp->setTextSize(1);
+    tmp->setTextColor(C_TX);
+    // Use glyph bbox offsets to correctly place the glyph inside tmp
+    int tx = -ebx;
+    int ty = -eby;
+    tmp->setCursor(tx, ty);
+    tmp->print(eight);
+
+    // Compute layout: left text + spacing + rotated glyph width
     const int spacing = 6;
+    int symbolRotWidth = tmp->height(); // rotated width
+    int totalW = tbw + spacing + symbolRotWidth;
 
-    int totalW = bw + spacing + symbolW;
-    int tx = (cvLap->width() - totalW)/2 - bx;
-    int ty = (cvLap->height() - bh)/2 - by;
+    int txText = (cvLap->width() - totalW)/2 - tbx;
+    int tyText = (cvLap->height() - tbh)/2 - tby;
 
+    // Draw left text
     cvLap->setTextColor(C_TX);
-    cvLap->setCursor(tx, ty); cvLap->print(sLeft);
+    cvLap->setCursor(txText, tyText);
+    cvLap->print(sLeft);
 
-    int symbolStart = tx + bw + spacing;
-    int cx1 = symbolStart + r;
-    int cx2 = symbolStart + r + (r - overlap);
+    int symbolStartX = txText + tbw + spacing;
     int ycenter = cvLap->height() / 2;
 
-    cvLap->drawCircle(cx1, ycenter, r, C_TX);
-    cvLap->drawCircle(cx2, ycenter, r, C_TX);
-    cvLap->fillCircle(cx1 + (r - overlap/2), ycenter, 2, C_TX);
+    // Copy pixels from tmp rotated 90° clockwise into cvLap
+    uint16_t* src = tmp->getBuffer();
+    int sw = tmp->width();
+    int sh = tmp->height();
+    for (int sy = 0; sy < sh; ++sy) {
+      for (int sx = 0; sx < sw; ++sx) {
+        uint16_t col = src[sy * sw + sx];
+        if (col == C_BG) continue; // skip background
+        // tmp(sx,sy) -> dest(dx,dy) for 90° clockwise rotation:
+        int dx = symbolStartX + sy;
+        int dy = ycenter - (sw / 2) + sx;
+        if (dx >= 0 && dx < cvLap->width() && dy >= 0 && dy < cvLap->height()) {
+          cvLap->drawPixel(dx, dy, col);
+        }
+      }
+    }
 
     cvLap->setFont(); cvLap->setTextSize(1);
   }

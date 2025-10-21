@@ -52,7 +52,6 @@ Once finalized, **STL and project files will be published** in this repo.
 ---
 
 ## To do
-- fix infinity symbol glitch
 - add brake bias change display
 - add traction control change display
 - add ABS change display

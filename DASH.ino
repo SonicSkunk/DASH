@@ -1,4 +1,4 @@
-/*
+ /*
 ESP32 SimHub Dash for ILI9341 (320x240) + 8x WS2812 LEDs
 Renders RPM, speed, lap counter, gear, position, tyre temperatures, lap/best, and delta on an ILI9341. 
 Drives an 8-LED shift bar via ESP32 RMT. 
@@ -78,12 +78,17 @@ int pitLimiterOn = 0;
 // Default to "on" if not provided in the CSV stream.
 int engineIgnitionOn = 1;
 
+// Brake bias (from SimHub: GameData.BrakeBias)
+// NOTE: SimHub must include GameData.BrakeBias in the CSV stream (see README/SimHub mapping)
+int brakeBias = 0;
+
 // ================== CHANGE-TRACKING ==================
 int crpm=-1, cspeed=-1, cgear=-999, cpos=-1;
 long clap=-1, cbest=-1, cdelta=LONG_MIN/2;
 int ccurLap = -1, cTotLaps = -1;
 int cTyreFL = INT_MIN, cTyreFR = INT_MIN, cTyreRL = INT_MIN, cTyreRR = INT_MIN;
 int cEngineIgnitionOn = -1;
+int cBrakeBias = INT_MIN; // track last shown brake bias
 
 // ================== DATA FRESHNESS ==================
 unsigned long lastDataTime = 0;
@@ -97,6 +102,12 @@ bool ignitionClearedPitInvert = false;
 bool pitScreenActive = false;
 // Track whether we've applied display inversion for pit mode
 bool pitInvertActive = false;
+
+// Brake bias overlay state
+bool brakeBiasScreenActive = false;
+unsigned long brakeBiasScreenStart = 0;
+const unsigned long BRAKE_BIAS_SHOW_MS = 2000; // show 2 seconds
+bool brakeBiasClearedPitInvert = false; // if we temporarily cleared display invert for the overlay
 
 // ================== LAYOUT ==================
 const int M  = 6;     // margin
@@ -136,6 +147,8 @@ static const GFXfont* FONT_TYRE_LABEL = &FreeSans8pt7b;
 static const GFXfont* FONT_LAP_NUMBER = &FreeSansBold18pt7b;
 // New message font for NO DATA and IGNITION OFF
 static const GFXfont* FONT_MESSAGE    = &FreeSansBold12pt7b;
+// Brake bias overlay font (user requested FreeSansBold18pt7b in blue)
+static const GFXfont* FONT_BRAKE      = &FreeSansBold18pt7b;
 
 // ================== HELPERS ==================
 static inline String msToStr(long ms) {
@@ -277,6 +290,19 @@ void drawIgnitionOffScreen() {
   tft.setFont(FONT_MESSAGE); tft.setTextSize(1); tft.setTextColor(C_BAD);
   int16_t x1, y1; uint16_t w, h;
   String msg = "IGNITION OFF";
+  tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
+  int x = (320 - w) / 2; int y = (240 - h) / 2;
+  tft.setCursor(x, y); tft.print(msg);
+  tft.setFont(); tft.setTextSize(1);
+}
+
+// ================ BRAKE BIAS OVERLAY ================
+void drawBrakeBiasOverlay() {
+  // Full white background with blue text (FreeSansBold18pt7b)
+  tft.fillScreen(ILI9341_WHITE);
+  tft.setFont(FONT_BRAKE); tft.setTextSize(1); tft.setTextColor(ILI9341_BLUE);
+  String msg = String("brake bias ") + String(brakeBias);
+  int16_t x1, y1; uint16_t w, h;
   tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
   int x = (320 - w) / 2; int y = (240 - h) / 2;
   tft.setCursor(x, y); tft.print(msg);
@@ -817,8 +843,8 @@ void readCSV(){
     lastDataTime = millis();
     char ch = (char)Serial.read();
     if ((uint8_t)ch == 10) { // LF terminator
-      long v[25] = {0}; int i = 0; String tok = "";
-      for (uint16_t k = 0; k < line.length() && i < 25; k++) {
+      long v[30] = {0}; int i = 0; String tok = "";
+      for (uint16_t k = 0; k < line.length() && i < 30; k++) {
         char c = line[k];
         if (c == ',') {
           tok.trim();
@@ -826,7 +852,7 @@ void readCSV(){
           tok = "";
         } else if ((uint8_t)c != 13) { tok += c; }
       }
-      tok.trim(); if (i < 25) v[i++] = tok.indexOf('.') >= 0 ? (long)tok.toFloat() : (long)tok.toInt();
+      tok.trim(); if (i < 30) v[i++] = tok.indexOf('.') >= 0 ? (long)tok.toFloat() : (long)tok.toInt();
 
       if (i >= 13) {
         rpm     = (int)v[0];
@@ -857,6 +883,11 @@ void readCSV(){
         // it is expected to follow after PitLimiterOn. If not present, default to ON.
         // SimHub property name: GameData.EngineIgnitionOn
         engineIgnitionOn = (i >= 21) ? (int)v[20] : 1;
+
+        // If SimHub provides GameData.BrakeBias, expect it after EngineIgnitionOn.
+        // Adjust the SimHub CSV mapping to include GameData.BrakeBias so the dash receives it.
+        // Example: if present, it will appear as v[21] (index 21 => 22nd field).
+        if (i >= 22) brakeBias = (int)v[21];
       }
       line = "";
     } else {
@@ -924,6 +955,22 @@ void loop(){
     cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
   }
 
+  // If brakeBias changed, activate overlay (but don't show over NO DATA or IGNITION OFF)
+  // We update cBrakeBias immediately to avoid repeated re-triggers for same value.
+  if (brakeBias != cBrakeBias && !noDataScreenActive && !ignitionScreenActive) {
+    // Enter brake-bias overlay
+    cBrakeBias = brakeBias;
+    brakeBiasScreenActive = true;
+    brakeBiasScreenStart = millis();
+    // If display is inverted for pit, temporarily clear it so white/blue overlay appears as intended
+    if (pitInvertActive) {
+      tft.invertDisplay(false);
+      brakeBiasClearedPitInvert = true;
+    }
+    drawBrakeBiasOverlay();
+    // Note: we DO NOT touch LEDs here — LED task continues unaffected.
+  }
+
   // Handle ignition-off screen: if ignition is explicitly off (from SimHub),
   // show a dedicated IGNITION OFF screen (similar to NO DATA) but keep telemetry updating
   // in the background. Show the same LED "no-data" blink pattern as the NO DATA screen.
@@ -987,6 +1034,30 @@ void loop(){
     crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
     ccurLap = -1; cTotLaps = -1;
     cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
+  }
+
+  // If brake bias overlay is active and its timeout has elapsed, clear it and restore main dash
+  if (brakeBiasScreenActive) {
+    if (millis() - brakeBiasScreenStart >= BRAKE_BIAS_SHOW_MS) {
+      // restore pit invert if we cleared it for the overlay
+      if (brakeBiasClearedPitInvert) {
+        if (pitInvertActive) {
+          tft.invertDisplay(true);
+        }
+        brakeBiasClearedPitInvert = false;
+      }
+      // redraw static/contents to restore the dash
+      drawStatic();
+      // force redraw of everything by resetting change trackers
+      crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
+      ccurLap = -1; cTotLaps = -1;
+      cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
+      brakeBiasScreenActive = false;
+    } else {
+      // While overlay active, skip further drawing so the overlay remains visible.
+      // LEDs continue unaffected.
+      return;
+    }
   }
 
   // Regular updates (always run, even when pit limiter is active)

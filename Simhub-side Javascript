@@ -1,4 +1,4 @@
-// ---- CLEAN SIMHUB SCRIPT (robust delta picker + tyre temps) ----
+// ---- CLEAN SIMHUB SCRIPT (robust delta picker + tyre temps + brake bias) ----
 // CSV fields (returned):
 // 0  RPM
 // 1  SPEED
@@ -21,6 +21,7 @@
 // 18 TYRE_RR (TyreTemperatureRearRight)
 // 19 PIT_LIMITER_ON  (GameData.PitLimiterOn -> 0/1)
 // 20 ENGINE_IGNITION_ON (GameData.EngineIgnitionOn -> 0/1)
+// 21 BRAKE_BIAS (GameData.BrakeBias)   <-- newly added field
 //
 // NOTE: dash expects tyre temps in the order FL, FR, RL, RR at indices 15..18 (0-based).
 
@@ -128,7 +129,17 @@ if (propExists('DataCorePlugin.GameData.EngineIgnitionOn')) {
   engineIgnitionOn = int($prop('GameData.EngineIgnitionOn'));
 } // else keep default 1
 
+// --- Brake bias (robust lookup)
+// We'll add this to the CSV as the 22nd field so DASH.ino can read it at v[21].
+let brakeBias = 0;
+if (propExists('DataCorePlugin.GameData.BrakeBias')) {
+  brakeBias = int($prop('DataCorePlugin.GameData.BrakeBias'));
+} else if (propExists('GameData.BrakeBias')) {
+  brakeBias = int($prop('GameData.BrakeBias'));
+}
+
 // Return CSV line (append pit limiter and ignition at the end to match ESP32 indices 19/20)
+// Also append brakeBias as the 22nd field (index 21).
 return [
   rpm, speed, gear, pos, fuel,
   lapMs, bestMs, deltaMs, maxRpm,
@@ -136,5 +147,6 @@ return [
   curLap, totLaps,
   tyreFL, tyreFR, tyreRL, tyreRR,
   pitLimiterOn,
-  engineIgnitionOn
+  engineIgnitionOn,
+  brakeBias
 ].join(',') + "\n";

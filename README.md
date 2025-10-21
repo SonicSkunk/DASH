@@ -46,9 +46,9 @@ Once finalized, **STL and project files will be published** in this repo.
 ---
 
 ## To do
-- fine-tune rev bar
+- fix CSV parser. Swap to fixed buffer + strtok_r:
+- pin the LED task to core 0
 - fix reverse gear displaying
-- improve delta accuracy
 
 ## Known Issues (WIP)
 - Reverse gear not showing

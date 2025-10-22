@@ -96,7 +96,3 @@ No data screen:
 <p align="center">
   <img src="Images/dash_nodata_layout_320x240.png">
 </p>
-
-
-## License
-MIT

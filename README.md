@@ -5,8 +5,12 @@
 
 ## Features
 Displays real-time telemetry (speed, RPM, gear, tyre temps, lap data, flags) from SimHub via CSV.
-Features include: LED rev bar, pit limiter overlay with display inversion, no-data and ignition-off screens, and a temporary brake bias overlay.
-Optimized off-screen rendering to eliminate flicker and a dedicated FreeRTOS LED task for smooth updates even under heavy SPI load.
+Features include: 
+- LED rev bar
+- pit limiter overlay with display inversion
+- no-data and ignition-off screens
+- a temporary brake bias overlay.
+- full flag system for led bar
 
 ---
 

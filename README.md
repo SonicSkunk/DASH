@@ -68,5 +68,35 @@ Once finalized, **STL and project files will be published** in this repo.
 - Reverse gear not showing
 ---
 
+## layout
+<p align="center">
+dash screen:
+</p>
+<p align="center">
+  <img src="Images/dash_layout_320x240.png">
+</p>
+
+<p align="center">
+Pit limiter screen:
+</p>
+<p align="center">
+  <img src="Images/dash_pit_layout_320x240.png">
+</p>
+
+<p align="center">
+brake bias change temporary screen:
+</p>
+<p align="center">
+  <img src="Images/dash_bias_layout_320x240.png">
+</p>
+
+<p align="center">
+No data screen:
+</p>
+<p align="center">
+  <img src="Images/dash_nodata_layout_320x240.png">
+</p>
+
+
 ## License
 MIT

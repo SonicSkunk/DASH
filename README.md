@@ -11,7 +11,7 @@ Optimized off-screen rendering to eliminate flicker and a dedicated FreeRTOS LED
 ---
 
 <p align="center">
-  <img src="Images/dash.jpg" width="800">
+  <img src="Images/dash prototype.jpg" width="800">
 </p>
 
 ---

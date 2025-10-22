@@ -65,7 +65,7 @@ Once finalized, **STL and project files will be published** in this repo.
 
 ## layout
 <p align="center">
-  <img src="Images/dash layout.png" width="800">
+  <img src="Images/dash layout explanation.png" width="800">
 </p>
 
 <p align="center">

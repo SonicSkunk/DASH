@@ -21,6 +21,13 @@ Optimized off-screen rendering to eliminate flicker and a dedicated FreeRTOS LED
   <img src="Images/DashWiring.png" width="800">
 </p>
 
+---
+
+## Dash layout
+<p align="center">
+  <img src="Images/dash layout.png" width="800">
+</p>
+
 ## Hardware
 - MCU: ESP32 | Any with RMT support |
 - Display: ILI9341, 320×240, SPI | Hardware SPI |

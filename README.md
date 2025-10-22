@@ -23,11 +23,6 @@ Optimized off-screen rendering to eliminate flicker and a dedicated FreeRTOS LED
 
 ---
 
-## Dash layout
-<p align="center">
-  <img src="Images/dash layout.png" width="800">
-</p>
-
 ## Hardware
 - MCU: ESP32 | Any with RMT support |
 - Display: ILI9341, 320×240, SPI | Hardware SPI |
@@ -70,6 +65,10 @@ Once finalized, **STL and project files will be published** in this repo.
 
 ## layout
 <p align="center">
+  <img src="Images/dash layout.png" width="800">
+</p>
+
+<p align="center">
 dash screen:
 </p>
 <p align="center">
@@ -84,15 +83,16 @@ Pit limiter screen:
 </p>
 
 <p align="center">
+No data screen:
+</p>
+<p align="center">
+  <img src="Images/dash_nodata_layout_320x240.png">
+</p>
+
+<p align="center">
 brake bias change temporary screen:
 </p>
 <p align="center">
   <img src="Images/dash_bias_layout_320x240.png">
 </p>
 
-<p align="center">
-No data screen:
-</p>
-<p align="center">
-  <img src="Images/dash_nodata_layout_320x240.png">
-</p>

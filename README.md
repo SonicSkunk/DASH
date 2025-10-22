@@ -18,7 +18,7 @@ Optimized off-screen rendering to eliminate flicker and a dedicated FreeRTOS LED
 
 ## Wiring schematic
 <p align="center">
-  <img src="Images/DashWiring.png" width="800">
+  <img src="Images/Wiring Schematic PNG.png" width="800">
 </p>
 
 ---

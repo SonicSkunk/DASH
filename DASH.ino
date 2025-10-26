@@ -1,8 +1,9 @@
- /*
+/*
 ESP32 SimHub Dash for ILI9341 (320x240) + 8x WS2812 LEDs
-Renders RPM, speed, lap counter, gear, position, tyre temperatures, lap/best, and delta on an ILI9341. 
-Drives an 8-LED shift bar via ESP32 RMT. 
+Renders RPM, speed, lap counter, gear, position, tyre temperatures, brake bias, lap/best, and delta on an ILI9341. 
+Drives an 8-LED bar via ESP32 RMT displaying revs and flags. 
 Falls back to NO DATA FEED when input stops.
+Now includes a boot screen and LED boot animation.
 */
 
 #include <SPI.h>
@@ -82,6 +83,11 @@ int engineIgnitionOn = 1;
 // NOTE: SimHub must include GameData.BrakeBias in the CSV stream (see README/SimHub mapping)
 int brakeBias = 0;
 
+// ================ BOOT SCREEN STATE ================
+bool bootScreenActive = false;
+bool anyDataReceived = false;     // true once we parse at least one valid CSV line
+unsigned long bootStartTime = 0;
+
 // ================== CHANGE-TRACKING ==================
 int crpm=-1, cspeed=-1, cgear=-999, cpos=-1;
 long clap=-1, cbest=-1, cdelta=LONG_MIN/2;
@@ -106,7 +112,7 @@ bool pitInvertActive = false;
 // Brake bias overlay state
 bool brakeBiasScreenActive = false;
 unsigned long brakeBiasScreenStart = 0;
-const unsigned long BRAKE_BIAS_SHOW_MS = 2000; // show 2 seconds
+const unsigned long BRAKE_BIAS_SHOW_MS = 1500; // shows 1.5 seconds
 bool brakeBiasClearedPitInvert = false; // if we temporarily cleared display invert for the overlay
 
 // ================== LAYOUT ==================
@@ -147,7 +153,7 @@ static const GFXfont* FONT_TYRE_LABEL = &FreeSans8pt7b;
 static const GFXfont* FONT_LAP_NUMBER = &FreeSansBold18pt7b;
 // New message font for NO DATA and IGNITION OFF
 static const GFXfont* FONT_MESSAGE    = &FreeSansBold12pt7b;
-// Brake bias overlay font (user requested FreeSansBold18pt7b in blue)
+// Brake bias overlay font
 static const GFXfont* FONT_BRAKE      = &FreeSansBold24pt7b;
 
 // ================== HELPERS ==================
@@ -284,8 +290,6 @@ void drawNoDataScreen() {
 
 // ================ IGNITION OFF SCREEN ================
 void drawIgnitionOffScreen() {
-  // Draw the ignition screen using the larger included font and regular colors.
-  // Note: loop code may temporarily clear hardware inversion before calling this.
   tft.fillScreen(C_BG);
   tft.setFont(FONT_MESSAGE); tft.setTextSize(1); tft.setTextColor(C_BAD);
   int16_t x1, y1; uint16_t w, h;
@@ -309,6 +313,20 @@ void drawBrakeBiasOverlay() {
   tft.setFont(); tft.setTextSize(1);
 }
 
+// ================ BOOT SCREEN ================
+void drawBootScreen() {
+  // White background, black text, same font as brake bias
+  tft.fillScreen(ILI9341_WHITE);
+  tft.setFont(FONT_MESSAGE); tft.setTextSize(1); tft.setTextColor(ILI9341_BLACK);
+  const String msg = "DASH BOOTING";
+  int16_t x1, y1; uint16_t w, h;
+  tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
+  int x = (320 - w) / 2;
+  int y = (240 - h) / 2;
+  tft.setCursor(x, y); tft.print(msg);
+  tft.setFont(); tft.setTextSize(1);
+}
+
 // ================== LED TASK / API ==================
 // We'll drive the strip from a dedicated FreeRTOS task so LED updates
 // are applied immediately and are not starved by heavy display SPI work.
@@ -319,6 +337,8 @@ volatile int  led_desired_lit = 0;      // desired number of lit LEDs (0..LED_CO
 volatile uint8_t led_desired_mask = 0;  // priority flags mask: bit3=red,bit2=yellow,bit1=blue,bit0=green
 volatile bool led_request_clear = false;
 volatile bool led_no_data_mode = false;
+// LED task boot-mode flag
+volatile bool led_boot_mode = false;
 
 // portMUX for atomic critical sections (required by IDF v5+)
 portMUX_TYPE ledMux = portMUX_INITIALIZER_UNLOCKED;
@@ -345,6 +365,12 @@ void ledTask(void *pv) {
   bool flashState = false;
   bool noDataOn = false;
 
+  // Boot animation state (Larson scanner vibe)
+  int bootIdx = 0;
+  int bootDir = 1; // 1 forward, -1 back
+  unsigned long lastBootStep = 0;
+  const unsigned long bootStepMs = 100;
+
   while (true) {
     // Wait for a notify, but wake periodically (30ms) to handle flashing and no-data blinking.
     ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(30)); // clears notification when returned
@@ -357,6 +383,7 @@ void ledTask(void *pv) {
     uint8_t mask = led_desired_mask;
     bool request_clear = led_request_clear;
     bool noDataMode = led_no_data_mode;
+    bool bootMode = led_boot_mode;
     portEXIT_CRITICAL(&ledMux);
 
     // If explicit clear requested, override everything
@@ -375,6 +402,31 @@ void ledTask(void *pv) {
       portENTER_CRITICAL(&ledMux);
       led_request_clear = false;
       portEXIT_CRITICAL(&ledMux);
+      continue;
+    }
+
+    // Boot animation takes priority over everything except explicit clear
+    if (bootMode) {
+      if (now - lastBootStep >= bootStepMs) {
+        lastBootStep = now;
+        bootIdx += bootDir;
+        if (bootIdx <= 0) { bootIdx = 0; bootDir = 1; }
+        if (bootIdx >= LED_COUNT - 1) { bootIdx = LED_COUNT - 1; bootDir = -1; }
+      }
+
+      // Draw a single bright pixel with a faint trail
+      bool needShow = false;
+      for (int i = 0; i < LED_COUNT; ++i) {
+        uint8_t trail = (uint8_t)(max(0, 255 - 120 * abs(i - bootIdx)));
+        RgbColor c = dimColor(RgbColor(0, 0, trail)); // blue-ish trail
+        if (i == bootIdx) c = dimColor(RgbColor(0, 0, 255));
+        if (lastColors[i].R != c.R || lastColors[i].G != c.G || lastColors[i].B != c.B) {
+          strip.SetPixelColor(i, c);
+          lastColors[i] = c;
+          needShow = true;
+        }
+      }
+      if (needShow) strip.Show();
       continue;
     }
 
@@ -463,8 +515,9 @@ void setRevBarStateImmediate(int lit, uint8_t mask) {
 
 void requestClearLeds() {
   portENTER_CRITICAL(&ledMux);
-  // also ensure no-data-mode is off when clearing
+  // also ensure modes are off when clearing
   led_no_data_mode = false;
+  led_boot_mode = false;
   led_request_clear = true;
   portEXIT_CRITICAL(&ledMux);
   notifyLedTask();
@@ -479,11 +532,9 @@ void setNoDataLeds() {
 }
 
 // ================== PIT LIMITER OVERLAY ==================
-// New behaviour:
-// - Keep the regular dash visible.
-// - In the gear box area, blink a large 'P' on/off.
-// - Invert the whole display colors while pitLimiterOn is active (hardware invert).
-// This lets the driver glance at the dash during pit and still clearly see the pit state.
+// - Keeps dash visible.
+// - Blinks a large 'P' in the gear box area.
+// - Inverts the display while active (hardware invert).
 
 void drawPitLimiterOverlayBlink() {
   static unsigned long lastBlink = 0;
@@ -516,8 +567,7 @@ void drawPitLimiterOverlayBlink() {
       tft.setCursor(cx, cy);
       tft.print("P");
     } else {
-      // Draw the current gear value centered in the gear box (this ensures
-      // the overlay alternates between 'P' and the actual gear, not a stale 'N').
+      // Draw the current gear value centered in the gear box.
       String g = (gear < 0) ? "R" : (gear == 0) ? "N" : String(gear);
       int16_t bx, by; uint16_t bw, bh;
       tft.getTextBounds(g, 0, 0, &bx, &by, &bw, &bh);
@@ -685,14 +735,10 @@ void drawDelta() {
   if (whole < 10) snprintf(buf, sizeof(buf), "%c %d.%03d", sign, whole, frac);
   else snprintf(buf, sizeof(buf), "%c%02d.%03d", sign, whole, frac);
 
-  // Preserve the original green/red/neutral colors even when display is inverted.
-  // When the hardware display inversion is active (pitInvertActive), the
-  // rendered pixels will be inverted by the display. To counteract that and
-  // keep the perceived colors the same (green for negative, red for positive),
-  // pre-invert the color we draw so the hardware inversion yields the intended color.
+  // Preserve colors even when display is inverted during pit.
   uint16_t col = (v < 0) ? C_OK : (v > 0 ? C_BAD : C_TX);
   if (pitInvertActive) {
-    col = (uint16_t)(~col); // bitwise invert 16-bit color so hardware inversion restores original
+    col = (uint16_t)(~col); // pre-invert so hardware inversion yields intended color
   }
 
   cvDelta->setTextSize(1);
@@ -732,8 +778,7 @@ void drawLapCounter() {
     cvLap->setFont(); cvLap->setTextSize(1);
 
   } else {
-    // Simple approach: render the '8' glyph from the same font into a small
-    // temporary canvas, then copy its pixels rotated 90° into cvLap.
+    // Render "curLap/" plus a rotated '8' as infinity symbol.
     String sLeft = String(curLap) + "/";
 
     // Left text metrics
@@ -763,7 +808,6 @@ void drawLapCounter() {
     tmp->setFont(FONT_LAP_NUMBER);
     tmp->setTextSize(1);
     tmp->setTextColor(C_TX);
-    // Use glyph bbox offsets to correctly place the glyph inside tmp
     int tx = -ebx;
     int ty = -eby;
     tmp->setCursor(tx, ty);
@@ -793,7 +837,6 @@ void drawLapCounter() {
       for (int sx = 0; sx < sw; ++sx) {
         uint16_t col = src[sy * sw + sx];
         if (col == C_BG) continue; // skip background
-        // tmp(sx,sy) -> dest(dx,dy) for 90° clockwise rotation:
         int dx = symbolStartX + sy;
         int dy = ycenter - (sw / 2) + sx;
         if (dx >= 0 && dx < cvLap->width() && dy >= 0 && dy < cvLap->height()) {
@@ -879,15 +922,14 @@ void readCSV(){
         // Expect GameData.PitLimiterOn next if present.
         pitLimiterOn = (i >= 20) ? (int)v[19] : 0;
 
-        // If the EngineIgnitionOn property is present in the CSV stream from SimHub,
-        // it is expected to follow after PitLimiterOn. If not present, default to ON.
-        // SimHub property name: GameData.EngineIgnitionOn
+        // Engine ignition on/off
         engineIgnitionOn = (i >= 21) ? (int)v[20] : 1;
 
-        // If SimHub provides GameData.BrakeBias, expect it after EngineIgnitionOn.
-        // Adjust the SimHub CSV mapping to include GameData.BrakeBias so the dash receives it.
-        // Example: if present, it will appear as v[21] (index 21 => 22nd field).
+        // Brake bias if provided
         if (i >= 22) brakeBias = (int)v[21];
+
+        // Mark that we received valid data
+        anyDataReceived = true;
       }
       line = "";
     } else {
@@ -929,13 +971,62 @@ void setup(){
   cvLapBest  = new GFXcanvas16(BBW-8,              BOT_H-6);
   cvDelta    = new GFXcanvas16(BBW-8,              BOT_H-6);
 
-  drawStatic();
-  lastDataTime = millis();
+  // Start in boot screen; boot LEDs on. We'll hand off in loop().
+  drawBootScreen();
+  bootScreenActive = true;
+  bootStartTime = millis();
+
+  // Enable LED boot animation
+  portENTER_CRITICAL(&ledMux);
+  led_boot_mode = true;
+  portEXIT_CRITICAL(&ledMux);
+  notifyLedTask();
+
+  // Consider data "stale" until something arrives
+  lastDataTime = 0;
 }
 
 // ================== MAIN LOOP ==================
 void loop(){
   readCSV();
+
+  unsigned long now = millis();
+
+  // Handle boot screen lifecycle
+  if (bootScreenActive) {
+    bool dataFresh = (lastDataTime != 0) && (now - lastDataTime <= 2000);
+
+    // If we got valid telemetry and it's fresh, leave boot immediately and show live dash.
+    if (anyDataReceived && dataFresh) {
+      bootScreenActive = false;
+
+      // stop boot LEDs
+      portENTER_CRITICAL(&ledMux); led_boot_mode = false; portEXIT_CRITICAL(&ledMux);
+      notifyLedTask();
+
+      drawStatic();
+      // force redraws
+      crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
+      ccurLap = -1; cTotLaps = -1;
+      cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;<s
+    }
+    // If boot grace expires without data, switch to NO DATA screen
+    else if (now - bootStartTime >= 4000) {
+      bootScreenActive = false;
+
+      // stop boot LEDs
+      portENTER_CRITICAL(&ledMux); led_boot_mode = false; portEXIT_CRITICAL(&ledMux);
+      notifyLedTask();
+
+      drawNoDataScreen();
+      noDataScreenActive = true;
+      setNoDataLeds();
+      return;
+    } else {
+      // Still in boot grace period; keep showing boot screen and animation
+      return;
+    }
+  }
 
   // Data-stale handling (no feed)
   if (millis() - lastDataTime > 2000) {
@@ -956,9 +1047,7 @@ void loop(){
   }
 
   // If brakeBias changed, activate overlay (but don't show over NO DATA or IGNITION OFF)
-  // We update cBrakeBias immediately to avoid repeated re-triggers for same value.
   if (brakeBias != cBrakeBias && !noDataScreenActive && !ignitionScreenActive) {
-    // Enter brake-bias overlay
     cBrakeBias = brakeBias;
     brakeBiasScreenActive = true;
     brakeBiasScreenStart = millis();
@@ -968,16 +1057,12 @@ void loop(){
       brakeBiasClearedPitInvert = true;
     }
     drawBrakeBiasOverlay();
-    // Note: we DO NOT touch LEDs here — LED task continues unaffected.
+    // LEDs continue unaffected.
   }
 
-  // Handle ignition-off screen: if ignition is explicitly off (from SimHub),
-  // show a dedicated IGNITION OFF screen (similar to NO DATA) but keep telemetry updating
-  // in the background. Show the same LED "no-data" blink pattern as the NO DATA screen.
+  // Handle ignition-off screen
   if (engineIgnitionOn == 0) {
     if (!ignitionScreenActive) {
-      // If we previously inverted the display for pit mode, temporarily clear inversion
-      // so the IGNITION OFF screen appears in regular colours.
       if (pitInvertActive) {
         tft.invertDisplay(false);
         ignitionClearedPitInvert = true;
@@ -985,16 +1070,11 @@ void loop(){
       drawIgnitionOffScreen();
       setNoDataLeds(); // same LED behaviour as NO DATA
       ignitionScreenActive = true;
-      // keep caches so when ignition returns we'll redraw everything
     }
-    // Stay in the ignition-off screen until ignition returns.
     return;
   } else {
-    // If ignition became on again, restore display once
     if (ignitionScreenActive) {
-      // If we previously cleared pit inversion for ignition display, restore it now
       if (ignitionClearedPitInvert) {
-        // Only re-enable if pit overlay is still active
         if (pitScreenActive) {
           tft.invertDisplay(true);
         }
@@ -1010,10 +1090,6 @@ void loop(){
   }
 
   // Pit limiter: set invert/flags but still update the full dash.
-  // Previously the code returned early while in pit mode which stopped all
-  // other UI updates and made the display appear frozen. To keep the same
-  // appearance but keep values updating, we set the invert state here but
-  // continue with normal drawing and then draw the blinking 'P' overlay on top.
   bool inPit = pitLimiterOn;
   if (inPit) {
     if (!pitScreenActive) {
@@ -1039,23 +1115,19 @@ void loop(){
   // If brake bias overlay is active and its timeout has elapsed, clear it and restore main dash
   if (brakeBiasScreenActive) {
     if (millis() - brakeBiasScreenStart >= BRAKE_BIAS_SHOW_MS) {
-      // restore pit invert if we cleared it for the overlay
       if (brakeBiasClearedPitInvert) {
         if (pitInvertActive) {
           tft.invertDisplay(true);
         }
         brakeBiasClearedPitInvert = false;
       }
-      // redraw static/contents to restore the dash
       drawStatic();
-      // force redraw of everything by resetting change trackers
       crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
       ccurLap = -1; cTotLaps = -1;
       cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
       brakeBiasScreenActive = false;
     } else {
-      // While overlay active, skip further drawing so the overlay remains visible.
-      // LEDs continue unaffected.
+      // Keep overlay visible; skip further drawing. LEDs continue unaffected.
       return;
     }
   }
@@ -1074,6 +1146,5 @@ void loop(){
   // If pit limiter is on, draw the blinking 'P' overlay on top of the gear box.
   if (inPit) {
     drawPitLimiterOverlayBlink();
-    // Keep rev LEDs updating while in pit (already called above).
   }
 }

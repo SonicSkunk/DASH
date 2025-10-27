@@ -59,8 +59,7 @@ Once finalized, **STL and project files will be published** in this repo.
 ---
 
 ## To do
-- fix CSV parser. Swap to fixed buffer + strtok_r:
-- pin the LED task to core 0
+- improve brake bias responsiviness 
 - fix reverse gear displaying
 
 ## Known Issues (WIP)

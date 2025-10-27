@@ -59,7 +59,7 @@ Once finalized, **STL and project files will be published** in this repo.
 ---
 
 ## To do
-- improve brake bias responsiviness 
+- improve brake bias responsiveness 
 - fix reverse gear displaying
 
 ## Known Issues (WIP)

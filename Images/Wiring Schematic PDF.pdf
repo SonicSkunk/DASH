@@ -10,7 +10,7 @@
 endobj
 4 0 obj
 <<
-/Length 45922
+/Length 43897
 >>
 stream
 0.14 w
@@ -519,7 +519,7 @@ BT
 9.82 TL
 0.000 g
 733.24 127.73 Td
-(2025-10-22) Tj
+(2025-10-23) Tj
 ET
 1 J
 1 j
@@ -599,7 +599,7 @@ BT
 9.82 TL
 0.000 g
 733.24 113.33 Td
-(2025-10-23) Tj
+(2025-10-27) Tj
 ET
 1 J
 1 j
@@ -3368,11 +3368,11 @@ S
 0.60 G
 0.00 g
 [] 0 d
-503.280 355.680 m 
-503.280 377.280 l
+492.480 377.280 m 
+492.480 355.680 l
 S
 229.680 377.280 m 
-503.280 377.280 l
+492.480 377.280 l
 S
 229.680 377.280 m 
 229.680 319.680 l
@@ -3380,7 +3380,7 @@ S
 229.680 319.680 m 
 211.680 319.680 l
 S
-503.280 355.680 m 
+492.480 355.680 m 
 481.680 355.680 l
 S
 1 J
@@ -3389,11 +3389,11 @@ S
 0.60 G
 0.00 g
 [] 0 d
-503.280 355.680 m 
-503.280 377.280 l
+492.480 377.280 m 
+492.480 355.680 l
 S
 229.680 377.280 m 
-503.280 377.280 l
+492.480 377.280 l
 S
 229.680 377.280 m 
 229.680 319.680 l
@@ -3401,7 +3401,7 @@ S
 229.680 319.680 m 
 211.680 319.680 l
 S
-503.280 355.680 m 
+492.480 355.680 m 
 481.680 355.680 l
 S
 1 J
@@ -3443,7 +3443,7 @@ S
 1 J
 1 j
 1.44 w
-1.00 0.00 0.00 RG
+0.60 0.00 0.60 RG
 0.00 g
 [] 0 d
 344.880 161.280 m 
@@ -3455,16 +3455,13 @@ S
 546.480 161.280 m 
 546.480 337.680 l
 S
-560.880 337.680 m 
-571.680 337.680 l
-S
-546.480 337.680 m 
-560.880 337.680 l
+571.680 337.680 m 
+546.480 337.680 l
 S
 1 J
 1 j
 1.44 w
-1.00 0.00 0.00 RG
+0.60 0.00 0.60 RG
 0.00 g
 [] 0 d
 344.880 161.280 m 
@@ -3476,11 +3473,8 @@ S
 546.480 161.280 m 
 546.480 337.680 l
 S
-560.880 337.680 m 
-571.680 337.680 l
-S
-546.480 337.680 m 
-560.880 337.680 l
+571.680 337.680 m 
+546.480 337.680 l
 S
 1 J
 1 j
@@ -3521,98 +3515,20 @@ S
 1 J
 1 j
 1.44 w
-0.60 0.80 1.00 RG
-0.00 g
-[] 0 d
-557.280 330.480 m 
-557.280 262.080 l
-S
-557.280 330.480 m 
-571.680 330.480 l
-S
-539.280 262.080 m 
-557.280 262.080 l
-S
-1 J
-1 j
-1.44 w
-0.60 0.80 1.00 RG
-0.00 g
-[] 0 d
-557.280 330.480 m 
-557.280 262.080 l
-S
-557.280 330.480 m 
-571.680 330.480 l
-S
-539.280 262.080 m 
-557.280 262.080 l
-S
-1 J
-1 j
-1.44 w
-0.60 0.80 1.00 RG
-0.00 g
-[] 0 d
-344.880 262.080 m 
-344.880 254.880 l
-S
-510.480 262.080 m 
-344.880 262.080 l
-S
-1 J
-1 j
-1.44 w
-0.60 0.80 1.00 RG
-0.00 g
-[] 0 d
-344.880 262.080 m 
-344.880 254.880 l
-S
-510.480 262.080 m 
-344.880 262.080 l
-S
-1 J
-1 j
-1.44 w
 1.00 0.40 0.00 RG
 0.00 g
 [] 0 d
-571.680 366.480 m 
-560.880 366.480 l
-S
-571.680 366.480 m 
-571.680 427.680 l
-S
-571.680 366.480 m 
-571.680 344.880 l
-S
-1 J
-1 j
-1.44 w
-1.00 0.40 0.00 RG
-0.00 g
-[] 0 d
-571.680 366.480 m 
-560.880 366.480 l
-S
-571.680 366.480 m 
-571.680 427.680 l
-S
-571.680 366.480 m 
-571.680 344.880 l
-S
-1 J
-1 j
-1.44 w
-1.00 0.40 0.00 RG
-0.00 g
-[] 0 d
-272.880 528.480 m 
-272.880 370.080 l
+571.680 528.480 m 
+481.680 528.480 l
 S
 481.680 528.480 m 
 272.880 528.480 l
+S
+272.880 528.480 m 
+272.880 370.080 l
+S
+272.880 370.080 m 
+211.680 370.080 l
 S
 481.680 528.480 m 
 481.680 456.480 l
@@ -3620,14 +3536,8 @@ S
 481.680 528.480 m 
 481.680 571.680 l
 S
-571.680 528.480 m 
-481.680 528.480 l
-S
-571.680 528.480 m 
-571.680 456.480 l
-S
-272.880 370.080 m 
-211.680 370.080 l
+571.680 344.880 m 
+571.680 528.480 l
 S
 1 J
 1 j
@@ -3635,11 +3545,17 @@ S
 1.00 0.40 0.00 RG
 0.00 g
 [] 0 d
-272.880 528.480 m 
-272.880 370.080 l
+571.680 528.480 m 
+481.680 528.480 l
 S
 481.680 528.480 m 
 272.880 528.480 l
+S
+272.880 528.480 m 
+272.880 370.080 l
+S
+272.880 370.080 m 
+211.680 370.080 l
 S
 481.680 528.480 m 
 481.680 456.480 l
@@ -3647,29 +3563,23 @@ S
 481.680 528.480 m 
 481.680 571.680 l
 S
-571.680 528.480 m 
-481.680 528.480 l
-S
-571.680 528.480 m 
-571.680 456.480 l
-S
-272.880 370.080 m 
-211.680 370.080 l
+571.680 344.880 m 
+571.680 528.480 l
 S
 1 J
 1 j
 1.44 w
-0.00 0.80 1.00 RG
+0.40 0.20 0.20 RG
 0.00 g
 [] 0 d
 481.680 283.680 m 
-503.280 283.680 l
+492.480 283.680 l
 S
-503.280 283.680 m 
-503.280 348.480 l
+492.480 348.480 m 
+492.480 283.680 l
 S
-503.280 348.480 m 
-326.880 348.480 l
+326.880 348.480 m 
+492.480 348.480 l
 S
 326.880 348.480 m 
 326.880 355.680 l
@@ -3680,17 +3590,17 @@ S
 1 J
 1 j
 1.44 w
-0.00 0.80 1.00 RG
+0.40 0.20 0.20 RG
 0.00 g
 [] 0 d
 481.680 283.680 m 
-503.280 283.680 l
+492.480 283.680 l
 S
-503.280 283.680 m 
-503.280 348.480 l
+492.480 348.480 m 
+492.480 283.680 l
 S
-503.280 348.480 m 
-326.880 348.480 l
+326.880 348.480 m 
+492.480 348.480 l
 S
 326.880 348.480 m 
 326.880 355.680 l
@@ -3698,177 +3608,99 @@ S
 326.880 355.680 m 
 211.680 355.680 l
 S
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-[] 0 d
-571.680 456.480 m 
-571.680 449.280 l
-S
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-[] 0 d
-571.680 427.680 m 
-571.680 434.880 l
-S
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-0.00 g
-[] 0 d
-565.920 443.520 m 
-577.440 443.520 l
-S
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-0.00 g
-[] 0 d
-571.680 434.880 m 
-571.680 440.640 l
-S
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-0.00 g
-[] 0 d
-577.440 440.640 m 
-565.920 440.640 l
-S
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-0.00 g
-[] 0 d
-571.680 443.520 m 
-571.680 449.280 l
-S
-7.20 w
-BT
-/F2 6.545454545454544 Tf
-7.20 TL
-0.000 0.000 1.000 rg
-546.48 439.79 Td
-(10 µF) Tj
-ET
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-[] 0 d
-560.880 366.480 m 
-560.880 359.280 l
-S
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-[] 0 d
-560.880 337.680 m 
-560.880 344.880 l
-S
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-0.00 g
-[] 0 d
-555.120 353.520 m 
-566.640 353.520 l
-S
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-0.00 g
-[] 0 d
-560.880 344.880 m 
-560.880 350.640 l
-S
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-0.00 g
-[] 0 d
-566.640 350.640 m 
-555.120 350.640 l
-S
-1 J
-1 j
-0.72 w
-0.63 0.00 0.00 RG
-0.00 g
-[] 0 d
-560.880 353.520 m 
-560.880 359.280 l
-S
-7.20 w
-BT
-/F2 6.545454545454544 Tf
-7.20 TL
-0.000 0.000 1.000 rg
-532.08 349.79 Td
-(470 µF) Tj
-ET
 2 J
 0 j
 72 M
 0.72 w
 0.63 0.00 0.00 RG
 [] 0 d
-517.68 264.96 14.40 -5.76 re
+554.40 312.48 5.76 -14.40 re
 S
 1 J
 1 j
 0.72 w
 0.63 0.00 0.00 RG
 [] 0 d
-539.280 262.080 m 
-532.080 262.080 l
+557.280 319.680 m 
+557.280 312.480 l
 S
 1 J
 1 j
 0.72 w
 0.63 0.00 0.00 RG
 [] 0 d
-510.480 262.080 m 
-517.680 262.080 l
+557.280 290.880 m 
+557.280 298.080 l
 S
 7.20 w
 BT
 7.20 TL
 0.000 0.000 1.000 rg
-517.68 266.99 Td
+560.88 302.99 Td
 /F2 6.545454545454544 Tf
 (330) Tj
 /F3 6.545454545454544 Tf
 <03a9> Tj
 ET
+1 J
+1 j
+1.44 w
+0.80 0.00 0.20 RG
+0.00 g
+[] 0 d
+557.280 262.080 m 
+344.880 262.080 l
+S
+344.880 262.080 m 
+344.880 254.880 l
+S
+557.280 262.080 m 
+557.280 290.880 l
+S
+1 J
+1 j
+1.44 w
+0.80 0.00 0.20 RG
+0.00 g
+[] 0 d
+557.280 262.080 m 
+344.880 262.080 l
+S
+344.880 262.080 m 
+344.880 254.880 l
+S
+557.280 262.080 m 
+557.280 290.880 l
+S
+1 J
+1 j
+1.44 w
+0.80 0.00 0.20 RG
+0.00 g
+[] 0 d
+557.280 330.480 m 
+571.680 330.480 l
+S
+557.280 330.480 m 
+557.280 319.680 l
+S
+1 J
+1 j
+1.44 w
+0.80 0.00 0.20 RG
+0.00 g
+[] 0 d
+557.280 330.480 m 
+571.680 330.480 l
+S
+557.280 330.480 m 
+557.280 319.680 l
+S
 0.80 0.00 0.00 rg
 242.28 456.48 m 242.28 457.47 241.47 458.28 240.48 458.28 c
 239.49 458.28 238.68 457.47 238.68 456.48 c
 238.68 455.49 239.49 454.68 240.48 454.68 c
 241.47 454.68 242.28 455.49 242.28 456.48 c
-f
-0.80 0.00 0.00 rg
-562.68 337.68 m 562.68 338.67 561.87 339.48 560.88 339.48 c
-559.89 339.48 559.08 338.67 559.08 337.68 c
-559.08 336.69 559.89 335.88 560.88 335.88 c
-561.87 335.88 562.68 336.69 562.68 337.68 c
-f
-0.80 0.00 0.00 rg
-573.48 366.48 m 573.48 367.47 572.67 368.28 571.68 368.28 c
-570.69 368.28 569.88 367.47 569.88 366.48 c
-569.88 365.49 570.69 364.68 571.68 364.68 c
-572.67 364.68 573.48 365.49 573.48 366.48 c
 f
 0.80 0.00 0.00 rg
 483.48 528.48 m 483.48 529.47 482.67 530.28 481.68 530.28 c
@@ -3987,61 +3819,57 @@ endobj
 >>
 >>
 endobj
+39 0 obj
+<</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 40 0 R>> endobj
+40 0 obj
+<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/136.07999999999998/5;this.zoom*=scale;var scrollX=275.4-(box[2]-box[0])/2/scale;var scrollY=388.79999999999995-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,455.03999999999996,343.43999999999994,322.55999999999995]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
 41 0 obj
 <</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 42 0 R>> endobj
 42 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/136.07999999999998/5;this.zoom*=scale;var scrollX=275.4-(box[2]-box[0])/2/scale;var scrollY=388.79999999999995-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,455.03999999999996,343.43999999999994,322.55999999999995]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
+<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/136.07999999999998/5;this.zoom*=scale;var scrollX=275.4-(box[2]-box[0])/2/scale;var scrollY=334.8-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,361.44,343.43999999999994,308.15999999999997]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
 43 0 obj
 <</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 44 0 R>> endobj
 44 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/136.07999999999998/5;this.zoom*=scale;var scrollX=275.4-(box[2]-box[0])/2/scale;var scrollY=334.8-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,361.44,343.43999999999994,308.15999999999997]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
+<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/272.88/5;this.zoom*=scale;var scrollX=343.79999999999995-(box[2]-box[0])/2/scale;var scrollY=334.79999999999995-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,339.84,480.24,329.76]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
 45 0 obj
 <</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 46 0 R>> endobj
 46 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/272.88/5;this.zoom*=scale;var scrollX=343.79999999999995-(box[2]-box[0])/2/scale;var scrollY=334.79999999999995-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,339.84,480.24,329.76]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
+<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/283.68/5;this.zoom*=scale;var scrollX=349.2-(box[2]-box[0])/2/scale;var scrollY=345.59999999999997-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,375.84,491.03999999999996,315.35999999999996]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
 47 0 obj
 <</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 48 0 R>> endobj
 48 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/294.47999999999996/5;this.zoom*=scale;var scrollX=354.59999999999997-(box[2]-box[0])/2/scale;var scrollY=345.59999999999997-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,375.84,501.8399999999999,315.35999999999996]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
+<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/272.88/5;this.zoom*=scale;var scrollX=343.79999999999995-(box[2]-box[0])/2/scale;var scrollY=316.79999999999995-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,347.03999999999996,480.24,286.55999999999995]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
 49 0 obj
 <</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 50 0 R>> endobj
 50 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/272.88/5;this.zoom*=scale;var scrollX=343.79999999999995-(box[2]-box[0])/2/scale;var scrollY=316.79999999999995-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,347.03999999999996,480.24,286.55999999999995]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
+<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/229.67999999999998/5;this.zoom*=scale;var scrollX=455.4-(box[2]-box[0])/2/scale;var scrollY=246.60000000000002-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[340.56,336.24,570.24,156.96]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
 51 0 obj
 <</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 52 0 R>> endobj
 52 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/229.67999999999998/5;this.zoom*=scale;var scrollX=455.4-(box[2]-box[0])/2/scale;var scrollY=246.60000000000002-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[340.56,336.24,570.24,156.96]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
+<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/272.88/5;this.zoom*=scale;var scrollX=343.79999999999995-(box[2]-box[0])/2/scale;var scrollY=381.6-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,426.24,480.24,336.96000000000004]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
 53 0 obj
 <</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 54 0 R>> endobj
 54 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/272.88/5;this.zoom*=scale;var scrollX=343.79999999999995-(box[2]-box[0])/2/scale;var scrollY=381.6-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,426.24,480.24,336.96000000000004]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
+<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/283.68/5;this.zoom*=scale;var scrollX=349.2-(box[2]-box[0])/2/scale;var scrollY=316.8-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,354.24,491.03999999999996,279.36]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
 55 0 obj
 <</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 56 0 R>> endobj
 56 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/71.28/5;this.zoom*=scale;var scrollX=552.6-(box[2]-box[0])/2/scale;var scrollY=293.4-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[534.96,329.03999999999996,570.24,257.76]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
+<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/215.28/5;this.zoom*=scale;var scrollX=448.2-(box[2]-box[0])/2/scale;var scrollY=270-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[340.56,289.44,555.84,250.56]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
 57 0 obj
 <</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 58 0 R>> endobj
 58 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/168.48/5;this.zoom*=scale;var scrollX=424.8-(box[2]-box[0])/2/scale;var scrollY=255.6-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[340.56,260.64,509.03999999999996,250.55999999999997]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
+<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/17.28/5;this.zoom*=scale;var scrollX=561.6-(box[2]-box[0])/2/scale;var scrollY=322.2-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[552.96,329.03999999999996,570.24,315.35999999999996]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
 59 0 obj
 <</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 60 0 R>> endobj
 60 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/85.67999999999999/5;this.zoom*=scale;var scrollX=563.4-(box[2]-box[0])/2/scale;var scrollY=383.40000000000003-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[556.56,426.24,570.2399999999999,340.56]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
-61 0 obj
-<</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 62 0 R>> endobj
-62 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/294.47999999999996/5;this.zoom*=scale;var scrollX=354.59999999999997-(box[2]-box[0])/2/scale;var scrollY=316.8-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,354.24,501.8399999999999,279.36]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
-63 0 obj
-<</D[0 /XYZ 0 599.76 0]/S/GoTo/Next 64 0 R>> endobj
-64 0 obj
-<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/362.88/5;this.zoom*=scale;var scrollX=388.79999999999995-(box[2]-box[0])/2/scale;var scrollY=468-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,570.24,570.24,365.76]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
+<</JS(this.zoomType=zoomtype.fitV;var box=this.getPageBox('Media',0);var scale=(box[2]-box[0])/362.88/5;this.zoom*=scale;var scrollX=388.79999999999995-(box[2]-box[0])/2/scale;var scrollY=455.40000000000003-(box[3]-box[1])/2/scale;this.scroll(scrollX,scrollY);this.removeField('arrow');var a = this.addField('arrow','text',0,[207.35999999999999,570.24,570.24,340.56000000000006]);a.textColor=color.blue;a.value="")/S/JavaScript>> endobj
 
 13 0 obj
 <<
 /Type /Outlines
 /First 14 0 R
 /Last 16 0 R
-/Count 27
+/Count 25
 >> 
 endobj
 
@@ -4062,8 +3890,8 @@ endobj
 /Parent 13 0 R
 /Prev 14 0 R
 /First 17 0 R
-/Last 39 0 R
-/Count 24
+/Last 37 0 R
+/Count 22
 >> 
 endobj
 
@@ -4160,7 +3988,7 @@ endobj
 
 31 0 obj
 <<
-/Title ($1N827)
+/Title ($1N993)
 /Parent 16 0 R
 /Prev 29 0 R
 /Next 33 0 R
@@ -4172,7 +4000,7 @@ endobj
 
 33 0 obj
 <<
-/Title ($1N831)
+/Title ($1N2009)
 /Parent 16 0 R
 /Prev 31 0 R
 /Next 35 0 R
@@ -4184,7 +4012,7 @@ endobj
 
 35 0 obj
 <<
-/Title ($1N940)
+/Title ($1N2013)
 /Parent 16 0 R
 /Prev 33 0 R
 /Next 37 0 R
@@ -4196,23 +4024,11 @@ endobj
 
 37 0 obj
 <<
-/Title ($1N993)
-/Parent 16 0 R
-/Prev 35 0 R
-/Next 39 0 R
-/First 38 0 R
-/Last 38 0 R
-/Count 1
->> 
-endobj
-
-39 0 obj
-<<
 /Title (GND)
 /Parent 16 0 R
-/Prev 37 0 R
-/First 40 0 R
-/Last 40 0 R
+/Prev 35 0 R
+/First 38 0 R
+/Last 38 0 R
 /Count 1
 >> 
 endobj
@@ -4221,7 +4037,7 @@ endobj
 <<
 /Title ($1N519)
 /Parent 17 0 R
-/A 41 0 R
+/A 39 0 R
 >> 
 endobj
 
@@ -4229,7 +4045,7 @@ endobj
 <<
 /Title ($1N581)
 /Parent 19 0 R
-/A 43 0 R
+/A 41 0 R
 >> 
 endobj
 
@@ -4237,7 +4053,7 @@ endobj
 <<
 /Title ($1N660)
 /Parent 21 0 R
-/A 45 0 R
+/A 43 0 R
 >> 
 endobj
 
@@ -4245,7 +4061,7 @@ endobj
 <<
 /Title ($1N693)
 /Parent 23 0 R
-/A 47 0 R
+/A 45 0 R
 >> 
 endobj
 
@@ -4253,7 +4069,7 @@ endobj
 <<
 /Title ($1N708)
 /Parent 25 0 R
-/A 49 0 R
+/A 47 0 R
 >> 
 endobj
 
@@ -4261,7 +4077,7 @@ endobj
 <<
 /Title ($1N723)
 /Parent 27 0 R
-/A 51 0 R
+/A 49 0 R
 >> 
 endobj
 
@@ -4269,57 +4085,49 @@ endobj
 <<
 /Title ($1N741)
 /Parent 29 0 R
-/A 53 0 R
+/A 51 0 R
 >> 
 endobj
 
 32 0 obj
 <<
-/Title ($1N827)
+/Title ($1N993)
 /Parent 31 0 R
-/A 55 0 R
+/A 53 0 R
 >> 
 endobj
 
 34 0 obj
 <<
-/Title ($1N831)
+/Title ($1N2009)
 /Parent 33 0 R
-/A 57 0 R
+/A 55 0 R
 >> 
 endobj
 
 36 0 obj
 <<
-/Title ($1N940)
+/Title ($1N2013)
 /Parent 35 0 R
-/A 59 0 R
+/A 57 0 R
 >> 
 endobj
 
 38 0 obj
 <<
-/Title ($1N993)
-/Parent 37 0 R
-/A 61 0 R
->> 
-endobj
-
-40 0 obj
-<<
 /Title ($1N949)
-/Parent 39 0 R
-/A 63 0 R
+/Parent 37 0 R
+/A 59 0 R
 >> 
 endobj
 
-65 0 obj
+61 0 obj
 <<
 /Producer (jsPDF 0.0.0)
-/CreationDate (D:20251023102416+02'00')
+/CreationDate (D:20251027105427+01'00')
 >>
 endobj
-66 0 obj
+62 0 obj
 <<
 /Type /Catalog
 /Pages 1 0 R
@@ -4329,81 +4137,77 @@ endobj
 >>
 endobj
 xref
-0 67
+0 63
 0000000000 65535 f 
-0000046099 00000 n 
-0000048307 00000 n 
+0000044074 00000 n 
+0000046282 00000 n 
 0000000015 00000 n 
 0000000124 00000 n 
-0000046156 00000 n 
-0000046321 00000 n 
-0000046500 00000 n 
-0000046616 00000 n 
-0000046785 00000 n 
-0000047829 00000 n 
-0000047995 00000 n 
-0000048189 00000 n 
-0000054414 00000 n 
-0000054491 00000 n 
-0000054696 00000 n 
-0000054594 00000 n 
-0000054822 00000 n 
-0000056197 00000 n 
-0000054926 00000 n 
-0000056262 00000 n 
-0000055043 00000 n 
-0000056327 00000 n 
-0000055160 00000 n 
-0000056392 00000 n 
-0000055277 00000 n 
-0000056457 00000 n 
-0000055394 00000 n 
-0000056522 00000 n 
-0000055511 00000 n 
-0000056587 00000 n 
-0000055628 00000 n 
-0000056652 00000 n 
-0000055745 00000 n 
-0000056717 00000 n 
-0000055862 00000 n 
-0000056782 00000 n 
-0000055979 00000 n 
-0000056847 00000 n 
-0000056096 00000 n 
-0000056912 00000 n 
-0000048432 00000 n 
-0000048493 00000 n 
+0000044131 00000 n 
+0000044296 00000 n 
+0000044475 00000 n 
+0000044591 00000 n 
+0000044760 00000 n 
+0000045804 00000 n 
+0000045970 00000 n 
+0000046164 00000 n 
+0000051862 00000 n 
+0000051939 00000 n 
+0000052144 00000 n 
+0000052042 00000 n 
+0000052270 00000 n 
+0000053530 00000 n 
+0000052374 00000 n 
+0000053595 00000 n 
+0000052491 00000 n 
+0000053660 00000 n 
+0000052608 00000 n 
+0000053725 00000 n 
+0000052725 00000 n 
+0000053790 00000 n 
+0000052842 00000 n 
+0000053855 00000 n 
+0000052959 00000 n 
+0000053920 00000 n 
+0000053076 00000 n 
+0000053985 00000 n 
+0000053193 00000 n 
+0000054050 00000 n 
+0000053311 00000 n 
+0000054116 00000 n 
+0000053429 00000 n 
+0000054182 00000 n 
+0000046407 00000 n 
+0000046468 00000 n 
+0000046937 00000 n 
+0000046998 00000 n 
+0000047442 00000 n 
+0000047503 00000 n 
+0000047937 00000 n 
+0000047998 00000 n 
+0000048443 00000 n 
+0000048504 00000 n 
 0000048962 00000 n 
 0000049023 00000 n 
-0000049467 00000 n 
-0000049528 00000 n 
-0000049962 00000 n 
-0000050023 00000 n 
-0000050492 00000 n 
-0000050553 00000 n 
-0000051011 00000 n 
-0000051072 00000 n 
-0000051493 00000 n 
-0000051554 00000 n 
-0000051987 00000 n 
-0000052048 00000 n 
-0000052455 00000 n 
-0000052516 00000 n 
-0000052936 00000 n 
-0000052997 00000 n 
-0000053428 00000 n 
-0000053489 00000 n 
-0000053933 00000 n 
-0000053994 00000 n 
-0000056977 00000 n 
-0000057063 00000 n 
+0000049444 00000 n 
+0000049505 00000 n 
+0000049938 00000 n 
+0000049999 00000 n 
+0000050419 00000 n 
+0000050480 00000 n 
+0000050874 00000 n 
+0000050935 00000 n 
+0000051354 00000 n 
+0000051415 00000 n 
+0000054247 00000 n 
+0000054333 00000 n 
 trailer
 <<
-/Size 67
-/Root 66 0 R
-/Info 65 0 R
-/ID [ <99EB72886085D7E32C712725193405AB> <99EB72886085D7E32C712725193405AB> ]
+/Size 63
+/Root 62 0 R
+/Info 61 0 R
+/ID [ <1099123BA7476E6BAF49E696C965E5ED> <1099123BA7476E6BAF49E696C965E5ED> ]
 >>
 startxref
-57184
+54454
 %%EOF

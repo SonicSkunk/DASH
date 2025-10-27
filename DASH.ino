@@ -1,7 +1,7 @@
 /*
 ESP32 SimHub Dash for ILI9341 (320x240) + 8x WS2812 LEDs
-Renders RPM, speed, lap counter, gear, position, tyre temperatures, brake bias, lap/best, and delta on an ILI9341. 
-Drives an 8-LED bar via ESP32 RMT displaying revs and flags. 
+Renders RPM, speed, lap counter, gear, position, tyre temperatures, brake bias, lap/best, and delta on an ILI9341.
+Drives an 8-LED bar via ESP32 RMT displaying revs and flags.
 Falls back to NO DATA FEED when input stops.
 Now includes a boot screen and LED boot animation.
 */
@@ -80,7 +80,6 @@ int pitLimiterOn = 0;
 int engineIgnitionOn = 1;
 
 // Brake bias (from SimHub: GameData.BrakeBias)
-// NOTE: SimHub must include GameData.BrakeBias in the CSV stream (see README/SimHub mapping)
 int brakeBias = 0;
 
 // ================ BOOT SCREEN STATE ================
@@ -166,6 +165,20 @@ static inline String msToStr(long ms) {
 }
 void frame(int x,int y,int w,int h){ tft.drawRect(x,y,w,h,C_BOX); }
 
+static void drawCenteredMessage(const GFXfont* font, uint16_t fg, uint16_t bg, const String& msg) {
+  tft.fillScreen(bg);
+  tft.setFont(font);
+  tft.setTextSize(1);
+  tft.setTextColor(fg);
+  int16_t bx,by; uint16_t bw,bh;
+  tft.getTextBounds(msg, 0, 0, &bx, &by, &bw, &bh);
+  int x = (320 - bw) / 2;
+  int y = (240 - bh) / 2;
+  tft.setCursor(x, y);
+  tft.print(msg);
+  tft.setFont(); tft.setTextSize(1);
+}
+
 static void centeredText_onCanvas(GFXcanvas16& cv,int x,int y,int w,int h,const GFXfont* font,const String& s,uint16_t col, uint16_t bg){
   cv.fillRect(x+2,y+2,w-4,h-4,bg);
   cv.setTextWrap(false);
@@ -182,35 +195,7 @@ static void centeredText_onCanvas(GFXcanvas16& cv,int x,int y,int w,int h,const 
   cv.setTextSize(1);
 }
 
-static void twoLine_onCanvas(GFXcanvas16& cv,int x,int y,int w,int h,const GFXfont* topFont,const String& top,const GFXfont* botFont,const String& bottom,uint16_t col, uint16_t bg){
-  const int gap = 6;
-  cv.fillRect(x+2,y+2,w-4,h-4,bg);
-  cv.setTextWrap(false);
-
-  cv.setFont(topFont); cv.setTextSize(1);
-  int16_t tbx,tby; uint16_t tbw,tbh;
-  cv.getTextBounds(top, 0, 0, &tbx, &tby, &tbw, &tbh);
-
-  cv.setFont(botFont); cv.setTextSize(1);
-  int16_t bbx,bby; uint16_t bbw,bbh;
-  cv.getTextBounds(bottom, 0, 0, &bbx, &bby, &bbw, &bbh);
-
-  int totalH = (int)tbh + gap + (int)bbh;
-  int blockTop = y + (h - totalH)/2;
-
-  int topBaseline = blockTop - tby;
-  int botBaseline = blockTop + tbh + gap - bby;
-
-  int cxTop = x + (w - tbw)/2 - tbx;
-  int cxBot = x + (w - bbw)/2 - bbx;
-
-  cv.setTextColor(col);
-  cv.setFont(topFont); cv.setCursor(cxTop, topBaseline); cv.print(top);
-  cv.setFont(botFont); cv.setCursor(cxBot, botBaseline); cv.print(bottom);
-
-  cv.setFont(); cv.setTextSize(1);
-}
-
+// twoLine helper with a configurable gap; twoLine_onCanvas keeps old signature by using gap=6
 static void twoLine_onCanvasGap(GFXcanvas16& cv,int x,int y,int w,int h,
                                 const GFXfont* topFont,const String& top,
                                 const GFXfont* botFont,const String& bottom,
@@ -240,6 +225,10 @@ static void twoLine_onCanvasGap(GFXcanvas16& cv,int x,int y,int w,int h,
   cv.setFont(botFont); cv.setCursor(cxBot, botBaseline); cv.print(bottom);
 
   cv.setFont(); cv.setTextSize(1);
+}
+
+static void twoLine_onCanvas(GFXcanvas16& cv,int x,int y,int w,int h,const GFXfont* topFont,const String& top,const GFXfont* botFont,const String& bottom,uint16_t col, uint16_t bg){
+  twoLine_onCanvasGap(cv, x, y, w, h, topFont, top, botFont, bottom, col, bg, 6);
 }
 
 // ================== OFFSCREEN CANVASES ==================
@@ -277,54 +266,24 @@ void drawStatic(){
 
 // ================== NO DATA ==================
 void drawNoDataScreen() {
-  tft.fillScreen(C_BG);
-  // Use larger included font for consistent sizing
-  tft.setFont(FONT_MESSAGE); tft.setTextSize(1); tft.setTextColor(C_BAD);
-  int16_t x1, y1; uint16_t w, h;
-  String msg = "NO DATA FEED";
-  tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
-  int x = (320 - w) / 2; int y = (240 - h) / 2;
-  tft.setCursor(x, y); tft.print(msg);
-  tft.setFont(); tft.setTextSize(1);
+  drawCenteredMessage(FONT_MESSAGE, C_BAD, C_BG, String("NO DATA FEED"));
 }
 
 // ================ IGNITION OFF SCREEN ================
 void drawIgnitionOffScreen() {
-  tft.fillScreen(C_BG);
-  tft.setFont(FONT_MESSAGE); tft.setTextSize(1); tft.setTextColor(C_BAD);
-  int16_t x1, y1; uint16_t w, h;
-  String msg = "IGNITION OFF";
-  tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
-  int x = (320 - w) / 2; int y = (240 - h) / 2;
-  tft.setCursor(x, y); tft.print(msg);
-  tft.setFont(); tft.setTextSize(1);
+  drawCenteredMessage(FONT_MESSAGE, C_BAD, C_BG, String("IGNITION OFF"));
 }
 
 // ================ BRAKE BIAS OVERLAY ================
 void drawBrakeBiasOverlay() {
   // Full white background with blue text (FreeSansBold18pt7b)
-  tft.fillScreen(ILI9341_WHITE);
-  tft.setFont(FONT_BRAKE); tft.setTextSize(1); tft.setTextColor(ILI9341_BLUE);
   String msg = String("B ias ") + String(brakeBias);
-  int16_t x1, y1; uint16_t w, h;
-  tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
-  int x = (320 - w) / 2; int y = (240 - h) / 2;
-  tft.setCursor(x, y); tft.print(msg);
-  tft.setFont(); tft.setTextSize(1);
+  drawCenteredMessage(FONT_BRAKE, ILI9341_BLUE, ILI9341_WHITE, msg);
 }
 
 // ================ BOOT SCREEN ================
 void drawBootScreen() {
-  // White background, black text, same font as brake bias
-  tft.fillScreen(ILI9341_WHITE);
-  tft.setFont(FONT_MESSAGE); tft.setTextSize(1); tft.setTextColor(ILI9341_BLACK);
-  const String msg = "DASH BOOTING";
-  int16_t x1, y1; uint16_t w, h;
-  tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
-  int x = (320 - w) / 2;
-  int y = (240 - h) / 2;
-  tft.setCursor(x, y); tft.print(msg);
-  tft.setFont(); tft.setTextSize(1);
+  drawCenteredMessage(FONT_MESSAGE, ILI9341_BLACK, ILI9341_WHITE, String("DASH BOOTING"));
 }
 
 // ================== LED TASK / API ==================
@@ -939,6 +898,13 @@ void readCSV(){
   }
 }
 
+// Helper: reset trackers that reflect "last displayed" values so next draw forces refresh
+static void resetDisplayedState() {
+  crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
+  ccurLap = -1; cTotLaps = -1;
+  cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
+}
+
 // ================== BOOT ==================
 void setup(){
   Serial.begin(115200);
@@ -1006,9 +972,7 @@ void loop(){
 
       drawStatic();
       // force redraws
-      crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
-      ccurLap = -1; cTotLaps = -1;
-      cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;<s
+      resetDisplayedState();
     }
     // If boot grace expires without data, switch to NO DATA screen
     else if (now - bootStartTime >= 4000) {
@@ -1041,9 +1005,7 @@ void loop(){
     // clear leds and leave no-data mode off
     requestClearLeds();
     noDataScreenActive = false;
-    crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
-    ccurLap = -1; cTotLaps = -1;
-    cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
+    resetDisplayedState();
   }
 
   // If brakeBias changed, activate overlay (but don't show over NO DATA or IGNITION OFF)
@@ -1083,9 +1045,7 @@ void loop(){
       drawStatic();
       requestClearLeds();
       ignitionScreenActive = false;
-      crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
-      ccurLap = -1; cTotLaps = -1;
-      cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
+      resetDisplayedState();
     }
   }
 
@@ -1107,9 +1067,7 @@ void loop(){
     drawStatic();
     requestClearLeds();
     pitScreenActive = false;
-    crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
-    ccurLap = -1; cTotLaps = -1;
-    cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
+    resetDisplayedState();
   }
 
   // If brake bias overlay is active and its timeout has elapsed, clear it and restore main dash
@@ -1122,9 +1080,7 @@ void loop(){
         brakeBiasClearedPitInvert = false;
       }
       drawStatic();
-      crpm=-1; cspeed=-1; cgear=-999; cpos=-1; clap=-1; cbest=-1; cdelta=LONG_MIN/2;
-      ccurLap = -1; cTotLaps = -1;
-      cTyreFL = cTyreFR = cTyreRL = cTyreRR = INT_MIN;
+      resetDisplayedState();
       brakeBiasScreenActive = false;
     } else {
       // Keep overlay visible; skip further drawing. LEDs continue unaffected.
